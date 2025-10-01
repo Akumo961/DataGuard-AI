@@ -1,0 +1,218 @@
+#!/usr/bin/env python3
+"""
+Setup script for DataGuard AI - Intelligent Privacy Compliance Checker
+"""
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+def run_command(cmd, description=None):
+    """Run shell command and check result"""
+    if description:
+        print(f"📦 {description}...")
+    print(f"   Running: {cmd}")
+    
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    
+    if result.return code != 0:
+        print(f"❌ Error running: {cmd}")
+        print(f"   Error: {result.stderr}")
+        return False
+    else:
+        print("✅ Success")
+        return True
+
+def create_file(path, content):
+    """Create a file with given content"""
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print(f"✅ Created: {path}")
+        return True
+    except Exception as e:
+        print(f"❌ Error creating {path}: {e}")
+        return False
+
+def setup_project():
+    """Setup the complete DataGuard AI project"""
+
+    print("🚀 Setting up DataGuard AI - Intelligent Privacy Compliance Checker")
+    print("=" * 60)
+    
+    # Create directory structure
+    directories = [
+        "data/raw",
+        "data/processed", 
+        "notebooks",
+        "src/models",
+        "src/utils",
+        "src/api",
+        "models",
+        "results/visualizations"
+    ]
+
+    for directory in directories:
+        try:
+            Path(directory).mkdir(parents=True, exist_ok=True)
+            print(f"📁 Created directory: {directory}")
+        except Exception as e:
+            print(f"❌ Error creating directory {directory}: {e}")
+    
+    # Create __init__.py files
+    init_files = [
+        "src/__init__.py",
+        "src/models/__init__.py", 
+        "src/utils/__init__.py",
+        "src/api/__init__.py"
+    ]
+
+    for init_file in init_files:
+        create_file(init_file, '"""Package initialization"""\n')
+
+    # Create sample data files
+    sample_documents = """This is a sample document containing test data.
+John Doe's email is john.doe@example.com and his phone number is 555-123-4567.
+The SSN 123-45-6789 should be detected as PII.
+Credit card: 4111-1111-1111-1111
+Address: 123 Main Street, Springfield, IL 62701"""
+
+    create_file("data/raw/sample_documents.txt", sample_documents)
+    
+    # Create sample training data
+    sample_training_data = [
+        {
+            "text": "John Smith's email is john.smith@company.com",
+            "entities": [
+                {"text": "John Smith", "label": "PERSON", "start": 0, "end": 10},
+                {"text": "john.smith@company.com", "label": "EMAIL", "start": 25, "end": 48}
+            ]
+        },
+        {
+            "text": "Call me at 555-987-6543 or email jane@test.org",
+            "entities": [
+                {"text": "555-987-6543", "label": "PHONE", "start": 11, "end": 23},
+                {"text": "jane@test.org", "label": "EMAIL", "start": 31, "end": 44}
+            ]
+        }
+    ]
+
+    import json
+    create_file("data/raw/pii_training_data.json", json.dumps(sample_training_data, indent=2))
+    
+    # Create compliance rules
+    compliance_rules = {
+        'gdpr': ['email', 'phone', 'address', 'name', 'ssn', 'passport'],
+        'hipaa': ['ssn', 'medical_record_number', 'health_plan_id', 'account_number'],
+        'ccpa': ['ssn', 'credit_card', 'california_driver_license', 'passport']
+    }
+
+    import yaml
+    create_file("data/raw/compliance_rules.yaml", yaml.dump(compliance_rules, default_flow_style=False))
+    
+    # Install requirements
+    print("\n📦 Installing Python dependencies...")
+    if not run_command("pip install -r requirements.txt", "Installing packages"):
+        print("❌ Failed to install requirements. Trying with pip3...")
+        run_command("pip3 install -r requirements.txt", "Installing packages with pip3")
+
+    # Download spaCy model
+    print("\n🤖 Downloading NLP models...")
+    run_command("python -m spacy download en_core_web_sm", "Downloading spaCy model")
+    
+    # Create a basic notebook
+    notebook_content = {
+        "cells": [
+            {
+                "cell_type": "markdown",
+                "metadata": {},
+                "source": [
+                    "# DataGuard AI - Data Exploration\n",
+                    "This notebook explores PII detection capabilities."
+                ]
+            },
+            {
+                "cell_type": "code",
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+                "source": [
+                    "from src.data_loader import DataLoader\n",
+                    "from src.preprocess import TextPreprocessor\n",
+                    "\n",
+                    "# Initialize components\n",
+                    "data_loader = DataLoader()\n",
+                    "text_processor = TextPreprocessor()\n",
+                    "\n",
+                    "# Load sample data\n",
+                    "with open('data/raw/sample_documents.txt', 'r') as f:\n",
+                    "    sample_text = f.read()\n",
+                    "\n",
+                    "print(\"Sample text:\")\n",
+                    "print(sample_text)\n",
+                    "\n",
+                    "# Detect PII\n",
+                    "detected_pii = text_processor.detect_pii_patterns(sample_text)\n",
+                    "print(\"\\nDetected PII:\")\n",
+                    "for pii_type, items in detected_pii.items():\n",
+                    "    print(f\"{pii_type}: {items}\")"
+                ]
+            }
+        ],
+        "metadata": {
+            "kernelspec": {
+                "display_name": "Python 3",
+                "language": "python",
+                "name": "python3"
+            }
+        },
+        "nbformat": 4,
+        "nbformat_minor": 4
+    }
+
+    create_file("notebooks/01_data_exploration.ipynb", json.dumps(notebook_content, indent=2))
+    
+    print("\n" + "=" * 60)
+    print("✅ DataGuard AI setup completed successfully!")
+    print("\n🎯 Next steps:")
+    print("1. Explore the project structure")
+    print("2. Review the sample data in data/raw/")
+    print("3. Run: python src/train.py --model pii")
+    print("4. Start API: python src/api/main.py")
+    print("5. Launch UI: python app.py")
+    print("\n📚 Project structure:")
+    print("   📄 app.py              - Gradio web interface")
+    print("   📄 src/api/main.py     - FastAPI backend")
+    print("   📄 src/train.py        - Model training")
+    print("   📁 data/raw/           - Sample data and rules")
+    print("   📁 notebooks/          - Jupyter notebooks for exploration")
+    
+    # Test basic functionality
+    print("\n🧪 Testing basic functionality...")
+    try:
+        # Test imports
+        import sys
+        sys.path.append('src')
+        from src.data_loader import DataLoader
+        from src.preprocess import TextPreprocessor
+        print("✅ Basic imports working")
+        
+        # Test PII detection
+        processor = TextPreprocessor()
+        test_text = "Email: test@example.com, Phone: 555-123-4567"
+        result = processor.detect_pii_patterns(test_text)
+        print("✅ PII detection working")
+        print(f"   Found: {list(result.keys())}")
+        
+    except Exception as e:
+        print(f"❌ Basic test failed: {e}")
+
+if __name__ == "__main__":
+    try:
+        setup_project()
+    except KeyboardInterrupt:
+        print("\n❌ Setup interrupted by user")
+    except Exception as e:
+        print(f"\n❌ Setup failed with error: {e}")
+        print("Please check your Python environment and try again.")
