@@ -1,0 +1,16 @@
+framework: gdpr
+version: "0.1.0"
+status: "verification_required"
+disclaimer: "Configurable control mapping only. Legal applicability and compliance conclusions require qualified organizational/legal review."
+rules:
+  - rule_id: DG-EU-GDPR-001
+    title: "Documented processing purpose"
+    description: "Track documented purpose and governance evidence for applicable processing activities."
+    category: governance
+    severity: high
+    evidence_required: [processing_purpose, processing_inventory, accountable_owner]
+    assessment_questions: ["Is the purpose documented?", "Is the processing activity inventoried?"]
+    remediation_recommendations: ["Document the purpose and maintain the processing inventory."]
+    version: "0.1.0"
+    source_reference: "Requires legal verification against applicable GDPR provisions."
+    applicability: conditional
