@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from dataguard.processing import DocumentInput, DocumentProcessingPipeline, UnsafeDocumentError
+from dataguard.processing import DocumentInput, DocumentProcessingPipeline, DocumentValidator, UnsafeDocumentError
 
 
 def test_text_extraction() -> None:
@@ -31,5 +31,6 @@ def test_rejects_bad_pdf_signature() -> None:
 
 
 def test_rejects_oversized_input() -> None:
+    pipeline = DocumentProcessingPipeline(DocumentValidator(max_bytes=10))
     with pytest.raises(UnsafeDocumentError):
-        DocumentProcessingPipeline().process(DocumentInput("file.txt", b"x" * 20)) if False else DocumentProcessingPipeline(__class__)  # type: ignore[arg-type]
+        pipeline.process(DocumentInput("file.txt", b"x" * 11))
