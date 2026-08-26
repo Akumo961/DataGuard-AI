@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, Uuid
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -44,6 +44,7 @@ class UserRole(UUIDPrimaryKeyMixin, Base):
 
 class APIKey(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     __tablename__ = "api_keys"
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(32), nullable=False)
     key_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
@@ -53,6 +54,7 @@ class APIKey(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
 
 class Analysis(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     __tablename__ = "analyses"
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="COMPLETED")
     source_type: Mapped[str] = mapped_column(String(64), nullable=False)
     source_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -61,6 +63,7 @@ class Analysis(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
 
 class SecurityEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
     __tablename__ = "security_events"
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     actor_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -71,6 +74,7 @@ class SecurityEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
 
 class AuditEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
     __tablename__ = "audit_events"
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     actor_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     object_type: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -85,6 +89,7 @@ class AuditEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
 
 class RefreshToken(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     __tablename__ = "refresh_tokens"
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
