@@ -48,10 +48,9 @@ def decode_access_token(token: str) -> AuthenticatedPrincipal:
             raise RuntimeError("JWT validation key is not configured")
         key = settings.jwt_secret.get_secret_value()
     else:
-        if not settings.oidc_issuer_url:
-            raise RuntimeError("OIDC issuer is not configured")
-        jwks_url = settings.oidc_issuer_url.rstrip("/") + "/.well-known/jwks.json"
-        key = PyJWKClient(jwks_url).get_signing_key_from_jwt(token).key
+        if not settings.oidc_jwks_url:
+            raise RuntimeError("OIDC JWKS endpoint is not configured")
+        key = PyJWKClient(settings.oidc_jwks_url).get_signing_key_from_jwt(token).key
 
     options = {"require": ["sub", "org", "roles", "iat", "exp"]}
     decode_kwargs: dict[str, Any] = {"algorithms": [settings.jwt_algorithm], "options": options}
