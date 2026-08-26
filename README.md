@@ -1,212 +1,75 @@
-# DataGuard AI — PII Detection & Compliance Automation
+# DataGuard Québec
 
+**AI-assisted privacy, personal-information discovery, risk assessment and compliance platform.**
 
-> AI-powered document analysis platform for detecting Personally Identifiable Information (PII) and assessing compliance risks using fine-tuned BERT models.
+DataGuard provides an enterprise-oriented foundation for discovering and classifying sensitive information, assessing privacy risk, supporting PIA workflows, applying configurable compliance controls, and maintaining audit evidence.
 
+> **Important:** DataGuard does not automatically establish legal compliance, certification, government approval, or regulatory conformity. Compliance controls and reports require organizational and qualified legal/privacy review.
 
-**Python** · **BERT** · **NLP** · **FastAPI** · **Gradio** · **PII Detection** · **Compliance**
-
-
-## Overview
-
-
-DataGuard AI automates the detection of sensitive personal information in unstructured documents and provides compliance-oriented analysis.
-
-
-The system combines NLP model inference with a FastAPI backend and Gradio interface for interactive document analysis.
-
-
-## Problem
-
-
-Organizations process large volumes of documents containing sensitive personal information.
-
-
-Manual identification of PII can be:
-
-- Time-consuming
-
-- Difficult to scale
-
-- Inconsistent
-
-- Expensive
-
-
-DataGuard AI explores an automated approach using transformer-based NLP.
-
-
-## Architecture
-
+## Current architecture
 
 ```text
-
-Document
-
+FastAPI API
    │
+   ├── Authentication / tenant context
+   ├── Application services
+   ├── PII detection pipeline
+   ├── Risk engine
+   ├── Compliance rules engine
+   ├── PIA workflow
+   ├── Audit/evidence services
+   └── Document processing
+          │
+          ├── extraction
+          ├── validation
+          └── OCR boundary
 
-   ▼
+PostgreSQL / SQLAlchemy / Alembic
 
-Document Ingestion
+Enterprise web UI
 
-   │
-
-   ▼
-
-Text Extraction
-
-   │
-
-   ▼
-
-Preprocessing
-
-   │
-
-   ▼
-
-Fine-tuned BERT
-
-   │
-
-   ▼
-
-PII Detection
-
-   │
-
-   ▼
-
-Compliance Analysis
-
-   │
-
-   ▼
-
-FastAPI / Gradio
-
-   │
-
-   ▼
-
-User Results
-
+Docker / CI quality pipeline
 ```
 
+## Verified capabilities in this repository
 
-## Core Capabilities
+- FastAPI application and versioned API
+- Pydantic contracts and validation
+- JWT authentication boundary with tenant context
+- PostgreSQL/SQLAlchemy persistence foundation
+- tenant isolation controls including PostgreSQL RLS migrations
+- configurable PII taxonomy and multi-layer detection architecture
+- deterministic privacy risk scoring with explainable contributing factors
+- versioned Québec, Canadian, GDPR and CCPA control files
+- PIA workflow model and state transitions
+- document extraction/validation/OCR interfaces
+- audit/evidence service foundation
+- responsive enterprise web dashboard
+- automated unit/API/security/domain tests
+- Docker and local development configuration
+- GitHub Actions quality workflow
+- synthetic demonstration-data generator
 
+## AI/ML claims
 
-- PII detection
+The repository does **not** contain sufficient reproducible evidence to support a production accuracy claim such as "95%+ accuracy". Historical prototype artifacts include empty model/data files; these are not treated as trained production models or validation evidence.
 
-- Document analysis
+Production ML adoption requires an approved evaluation dataset, reproducible training/evaluation pipeline, model provenance, precision/recall/F1, per-class error analysis and human review.
 
-- Multi-format document support
+## Run locally
 
-- Transformer-based NLP
+See `docs/DEPLOYMENT.md` and `docker-compose.local.yml` for the supported local setup.
 
-- Real-time inference
+The primary application entry point is the FastAPI application under `dataguard/`. The enterprise UI is served by the application at `/` when configured for local use.
 
-- FastAPI backend
+## Documentation
 
-- Gradio interface
+See `docs/` for architecture, security, threat model, privacy architecture, compliance controls, PIA, deployment, testing, procurement, release governance and government demonstration documentation.
 
-- Compliance-oriented analysis
+## Security and privacy
 
+Do not upload real personal information to an unapproved development environment. Use the synthetic demo data for demonstrations. Production deployments require approved identity, secrets, network, encryption, retention, monitoring, backup and incident-response controls.
 
-## Machine Learning
+## Project status
 
-
-The project uses a fine-tuned BERT-based model for PII detection.
-
-
-The ML pipeline includes:
-
-
-```text
-
-Training Data
-
-     ↓
-
-Preprocessing
-
-     ↓
-
-Tokenization
-
-     ↓
-
-BERT Fine-tuning
-
-     ↓
-
-Evaluation
-
-     ↓
-
-Inference
-
-```
-
-
-## Results
-
-
-The project achieved **95%+ PII detection accuracy** based on the project's evaluation.
-
-
-The workflow was designed to reduce manual document review effort, with an estimated **90% reduction in manual review**.
-
-
-> Evaluation metrics should be interpreted according to the dataset and evaluation methodology used by the project.
-
-
-## API
-
-
-The inference service is exposed through FastAPI, enabling integration into other applications and document-processing workflows.
-
-
-## User Interface
-
-
-A Gradio interface provides an interactive way to submit documents and inspect detection results.
-
-
-## Technology Stack
-
-
-- Python
-
-- PyTorch / Transformers
-
-- BERT
-
-- NLP
-
-- FastAPI
-
-- Gradio
-
-
-## Engineering Focus
-
-
-**Machine Learning + NLP + Model Inference + Document Processing + API Engineering**
-
-
-## Limitations
-
-
-PII detection systems should be evaluated against representative datasets and validated for the specific regulatory and organizational context in which they are deployed.
-
-
-The system should not be treated as a substitute for legal or compliance advice.
-
-
-## Disclaimer
-
-
-This project is for research and technical demonstration purposes.
-
+This repository is an enterprise product foundation and evaluation candidate. It is **not** evidence of a government contract, certification, accreditation, customer deployment or automatic legal compliance. Independent security assessment, target-environment validation, ML validation, legal/privacy review and operational acceptance remain required before a government production deployment.
