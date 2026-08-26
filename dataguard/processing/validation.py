@@ -3,6 +3,7 @@ from __future__ import annotations
 import mimetypes
 from pathlib import PurePath
 
+from dataguard.processing.archive import validate_ooxml_archive
 from dataguard.processing.models import DocumentInput, DocumentType
 
 
@@ -43,6 +44,11 @@ class DocumentValidator:
         kind, magic = spec
         if magic is not None and not document.content.startswith(magic):
             raise UnsafeDocumentError("file signature does not match the extension")
+        if kind in {DocumentType.DOCX, DocumentType.XLSX}:
+            try:
+                validate_ooxml_archive(document.content)
+            except ValueError as exc:
+                raise UnsafeDocumentError(str(exc)) from exc
         if document.declared_mime and suffix in {".pdf", ".docx", ".xlsx", ".png", ".jpg", ".jpeg", ".tif", ".tiff"}:
             guessed = mimetypes.guess_type(name)[0]
             if guessed and document.declared_mime != guessed:
