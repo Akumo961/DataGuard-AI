@@ -45,7 +45,7 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RateLimitMiddleware)
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]"])
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 
     @app.get("/health/live", tags=["health"])
     async def liveness() -> dict[str, str]:
