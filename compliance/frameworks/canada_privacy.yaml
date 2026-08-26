@@ -1,0 +1,16 @@
+framework: canada_privacy
+version: "0.1.0"
+status: "verification_required"
+disclaimer: "Configurable control mapping only. Legal applicability and compliance conclusions require qualified organizational/legal review."
+rules:
+  - rule_id: DG-CA-PI-001
+    title: "Accountability and safeguards"
+    description: "Track organizational accountability and documented safeguards for personal information."
+    category: governance
+    severity: high
+    evidence_required: [privacy_policy, accountable_owner, safeguards]
+    assessment_questions: ["Is accountability assigned?", "Are safeguards documented?"]
+    remediation_recommendations: ["Assign accountability and document safeguards."]
+    version: "0.1.0"
+    source_reference: "Requires legal verification against applicable Canadian privacy law and sector rules."
+    applicability: review

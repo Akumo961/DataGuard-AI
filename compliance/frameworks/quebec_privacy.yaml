@@ -1,0 +1,27 @@
+framework: quebec_privacy
+version: "0.1.0"
+status: "verification_required"
+disclaimer: "Configurable control mapping only. Legal applicability and compliance conclusions require qualified organizational/legal review."
+rules:
+  - rule_id: DG-QC-PI-001
+    title: "Personal information governance"
+    description: "Maintain documented governance for personal information processing and accountability."
+    category: governance
+    severity: high
+    evidence_required: [privacy_policy, accountable_owner, processing_inventory]
+    assessment_questions: ["Is an accountable owner assigned?", "Is processing documented?"]
+    remediation_recommendations: ["Assign an accountable owner.", "Maintain a current processing inventory."]
+    version: "0.1.0"
+    source_reference: "Requires legal verification against applicable Québec privacy legislation and organizational policy."
+    applicability: review
+  - rule_id: DG-QC-PI-002
+    title: "Privacy impact assessment evidence"
+    description: "Track documented privacy risk assessment evidence for applicable projects and systems."
+    category: assessment
+    severity: high
+    evidence_required: [pia_record, risk_assessment, safeguards]
+    assessment_questions: ["Has the applicable privacy assessment been documented?", "Are safeguards recorded?"]
+    remediation_recommendations: ["Complete the applicable assessment and document safeguards."]
+    version: "0.1.0"
+    source_reference: "Requires legal verification against applicable Québec requirements."
+    applicability: conditional
