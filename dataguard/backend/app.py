@@ -9,6 +9,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from dataguard.core.config import get_settings
 from dataguard.security.rate_limit_middleware import RateLimitMiddleware
+from dataguard.security.request_limits import RequestSizeLimitMiddleware
 from dataguard.security.web import SecurityHeadersMiddleware
 
 
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
         max_age=600,
     )
     app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RequestSizeLimitMiddleware)
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 
