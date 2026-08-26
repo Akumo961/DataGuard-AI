@@ -1,0 +1,16 @@
+framework: ccpa
+version: "0.1.0"
+status: "verification_required"
+disclaimer: "Configurable control mapping only. Legal applicability and compliance conclusions require qualified organizational/legal review."
+rules:
+  - rule_id: DG-US-CCPA-001
+    title: "Consumer privacy governance"
+    description: "Track governance evidence for applicable consumer personal-information processing."
+    category: governance
+    severity: high
+    evidence_required: [privacy_notice, processing_inventory, accountable_owner]
+    assessment_questions: ["Is the applicable notice documented?", "Is processing inventoried?"]
+    remediation_recommendations: ["Review applicable notice requirements and maintain processing records."]
+    version: "0.1.0"
+    source_reference: "Requires legal verification against applicable California law and regulations."
+    applicability: conditional
