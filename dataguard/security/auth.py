@@ -1,15 +1,11 @@
-"""OIDC-ready JWT authentication primitives.
-
-Tokens are validated against configured issuer/audience and asymmetric keys in production.
-Local development may use an explicitly configured HMAC secret; no insecure fallback exists.
-"""
+"""JWT authentication primitives with local HMAC and OIDC/JWKS validation."""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import jwt
-from jwt import InvalidTokenError
+from jwt import InvalidTokenError, PyJWKClient
 
 from dataguard.core.config import get_settings
 from dataguard.security.policy import Role, TenantContext
@@ -28,8 +24,10 @@ class AuthenticatedPrincipal:
 def create_access_token(*, subject_id: str, organization_id: str, roles: set[Role],
                         expires_minutes: int = 15) -> str:
     settings = get_settings()
-    if settings.jwt_algorithm != "HS256" or not settings.jwt_secret:
-        raise RuntimeError("Local token issuance requires an explicitly configured JWT secret")
+    if settings.environment == "production" or settings.jwt_algorithm != "HS256" or settings.jwt_secret is None:
+        raise RuntimeError("Local token issuance is disabled for production")
+    if not 1 <= expires_minutes <= 60:
+        raise ValueError("Access token lifetime must be between 1 and 60 minutes")
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
         "sub": subject_id,
@@ -38,24 +36,30 @@ def create_access_token(*, subject_id: str, organization_id: str, roles: set[Rol
         "iat": now,
         "exp": now + timedelta(minutes=expires_minutes),
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, settings.jwt_secret.get_secret_value(), algorithm="HS256")
 
 
 def decode_access_token(token: str) -> AuthenticatedPrincipal:
     settings = get_settings()
     if not token or len(token) > 16_384:
         raise InvalidTokenError("Invalid access token")
-    if not settings.jwt_secret:
-        raise RuntimeError("JWT validation key is not configured")
+    if settings.jwt_algorithm == "HS256":
+        if settings.jwt_secret is None:
+            raise RuntimeError("JWT validation key is not configured")
+        key = settings.jwt_secret.get_secret_value()
+    else:
+        if not settings.oidc_issuer_url:
+            raise RuntimeError("OIDC issuer is not configured")
+        jwks_url = settings.oidc_issuer_url.rstrip("/") + "/.well-known/jwks.json"
+        key = PyJWKClient(jwks_url).get_signing_key_from_jwt(token).key
+
     options = {"require": ["sub", "org", "roles", "iat", "exp"]}
-    payload = jwt.decode(
-        token,
-        settings.jwt_secret,
-        algorithms=[settings.jwt_algorithm],
-        audience=settings.jwt_audience or None,
-        issuer=settings.jwt_issuer or None,
-        options=options,
-    )
+    decode_kwargs: dict[str, Any] = {"algorithms": [settings.jwt_algorithm], "options": options}
+    if settings.jwt_issuer:
+        decode_kwargs["issuer"] = settings.jwt_issuer
+    if settings.jwt_audience:
+        decode_kwargs["audience"] = settings.jwt_audience
+    payload = jwt.decode(token, key, **decode_kwargs)
     subject = payload.get("sub")
     organization = payload.get("org")
     raw_roles = payload.get("roles")
