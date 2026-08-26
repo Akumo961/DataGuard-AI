@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     jwt_issuer: str | None = None
     jwt_audience: str | None = None
     oidc_issuer_url: str | None = None
+    oidc_jwks_url: str | None = None
     security_headers_enabled: bool = True
     rate_limit_per_minute: int = Field(default=120, ge=1, le=10_000)
     max_request_body_bytes: int = Field(default=60 * 1024 * 1024, ge=1_024)
@@ -59,13 +60,20 @@ class Settings(BaseSettings):
             raise ValueError("JWT secret must contain at least 32 characters")
         return value
 
+    @field_validator("oidc_issuer_url", "oidc_jwks_url")
+    @classmethod
+    def validate_oidc_urls(cls, value: str | None) -> str | None:
+        if value is not None and not value.startswith("https://"):
+            raise ValueError("OIDC endpoints must use HTTPS")
+        return value
+
     def validate_production(self) -> None:
         if self.environment != "production":
             return
         if self.jwt_algorithm not in {"RS256", "ES256"}:
             raise ValueError("Production JWT validation must use RS256 or ES256 through OIDC/JWKS")
-        if not self.oidc_issuer_url or not self.jwt_issuer or not self.jwt_audience:
-            raise ValueError("Production authentication requires OIDC issuer, JWT issuer and audience")
+        if not self.oidc_issuer_url or not self.oidc_jwks_url or not self.jwt_issuer or not self.jwt_audience:
+            raise ValueError("Production authentication requires OIDC issuer, JWKS URL, JWT issuer and audience")
         if any(origin.startswith("http://") for origin in self.allowed_origins):
             raise ValueError("Production CORS origins must use HTTPS")
 
