@@ -25,7 +25,7 @@ def test_tampered_token_is_rejected(monkeypatch) -> None:
     from dataguard.core.config import get_settings
     get_settings.cache_clear()
     token = create_access_token(subject_id="u", organization_id="o", roles={Role.VIEWER})
-    header, payload, signature = token.split(".")
+    header, _, signature = token.split(".")
     tampered = jwt.utils.base64url_encode(b'{"sub":"attacker"}').decode()
     with pytest.raises(jwt.InvalidTokenError):
         decode_access_token(f"{header}.{tampered}.{signature}")
