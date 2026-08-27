@@ -43,14 +43,14 @@ addopts = "-ra"
 include = [
   "dataguard",
   "dataguard.*",
-  "compliance",
-  "compliance.*",
-  "DataGuardAI",
-  "DataGuardAI.*",
 ]
 exclude = [
   "demo",
   "demo.*",
   "alembic",
   "alembic.*",
+  "compliance",
+  "compliance.*",
+  "DataGuardAI",
+  "DataGuardAI.*",
 ]
