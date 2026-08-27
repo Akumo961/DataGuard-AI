@@ -28,12 +28,23 @@ class FakeSession:
 
 
 def test_failed_password_attempts_lock_account() -> None:
-    user = User(organization_id=uuid4(), email="analyst@example.test", password_hash=hash_password("correct-password"), display_name="Analyst")
+    user = User(
+        organization_id=uuid4(),
+        email="analyst@example.test",
+        password_hash=hash_password("correct-password"),
+        display_name="Analyst",
+        active=True,
+    )
     session = FakeSession(user)
 
     async def run() -> None:
         for _ in range(MAX_FAILED_LOGINS):
-            assert await authenticate_local_user(session, user.organization_id, user.email, "wrong-password") is None
+            assert (
+                await authenticate_local_user(
+                    session, user.organization_id, user.email, "wrong-password"
+                )
+                is None
+            )
 
     asyncio.run(run())
     assert user.locked_until is not None
