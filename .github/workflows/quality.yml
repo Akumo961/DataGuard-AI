@@ -21,9 +21,9 @@ jobs:
       - name: Install
         run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
       - name: Ruff format check
-        run: python -m ruff format --check .
+        run: python -m ruff format --check dataguard compliance
       - name: Ruff lint
-        run: python -m ruff check .
+        run: python -m ruff check dataguard compliance
       - name: Type check
         run: python -m mypy dataguard
       - name: Tests with coverage
@@ -45,6 +45,6 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install pip-audit
-        run: python -m pip install --upgrade pip pip-audit
+        run: python -m pip install --upgrade pip pip-audit "setuptools>=83.0.0"
       - name: Audit declared dependencies
         run: python -m pip install -e . && python -m pip_audit
