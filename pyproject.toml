@@ -34,3 +34,19 @@ target-version = "py311"
 [tool.pytest.ini_options]
 testpaths = ["dataguard/tests"]
 addopts = "-ra"
+
+[tool.setuptools.packages.find]
+include = [
+  "dataguard",
+  "dataguard.*",
+  "compliance",
+  "compliance.*",
+  "DataGuardAI",
+  "DataGuardAI.*",
+]
+exclude = [
+  "demo",
+  "demo.*",
+  "alembic",
+  "alembic.*",
+]
