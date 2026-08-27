@@ -18,6 +18,7 @@ class AuditRecord:
     ip_address: str | None
     request_id: str
     result: str
+    previous_hash: str
     integrity_hash: str
 
 
