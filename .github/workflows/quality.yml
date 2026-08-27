@@ -31,7 +31,10 @@ jobs:
       - name: Type check
         run: >-
           python -m mypy dataguard --ignore-missing-imports
-          --disable-error-code=arg-type,assignment,attr-defined,import-not-found,import-untyped,misc,override
+          --disable-error-code=arg-type --disable-error-code=assignment
+          --disable-error-code=attr-defined --disable-error-code=import-not-found
+          --disable-error-code=import-untyped --disable-error-code=misc
+          --disable-error-code=override
       - name: Tests with coverage
         run: python -m pytest --cov=dataguard --cov-report=term-missing --cov-report=xml --cov-fail-under=60
       - name: Upload coverage report
