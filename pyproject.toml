@@ -34,6 +34,16 @@ ocr = ["pytesseract>=0.3.13,<1"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+ignore = [
+  "B008",
+  "BLE001",
+  "FURB167",
+  "RUF012",
+  "TRY004",
+  "UP006",
+  "UP017",
+  "UP035",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["dataguard/tests"]
