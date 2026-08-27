@@ -34,6 +34,7 @@ def test_failed_password_attempts_lock_account() -> None:
         password_hash=hash_password("correct-password"),
         display_name="Analyst",
         active=True,
+        failed_login_count=0,
     )
     session = FakeSession(user)
 
