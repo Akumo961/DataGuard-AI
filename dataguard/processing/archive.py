@@ -8,7 +8,12 @@ class UnsafeArchiveError(ValueError):
     pass
 
 
-def validate_ooxml_archive(content: bytes, *, max_members: int = 500, max_uncompressed_bytes: int = 50 * 1024 * 1024) -> None:
+def validate_ooxml_archive(
+    content: bytes,
+    *,
+    max_members: int = 500,
+    max_uncompressed_bytes: int = 50 * 1024 * 1024,
+) -> None:
     """Reject suspicious OOXML ZIP containers before handing them to parsers."""
     try:
         with zipfile.ZipFile(io.BytesIO(content), "r") as archive:
@@ -18,7 +23,8 @@ def validate_ooxml_archive(content: bytes, *, max_members: int = 500, max_uncomp
             total = 0
             for member in members:
                 name = member.filename.replace("\\", "/")
-                if name.startswith("/") or "../" in name.split("/"):
+                parts = name.split("/")
+                if name.startswith("/") or any(part == ".." for part in parts):
                     raise UnsafeArchiveError("archive contains an unsafe path")
                 if member.file_size < 0:
                     raise UnsafeArchiveError("invalid archive member size")
