@@ -48,6 +48,7 @@ ignore = [
 [tool.pytest.ini_options]
 testpaths = ["dataguard/tests"]
 addopts = "-ra"
+import_mode = "importlib"
 
 [tool.setuptools.packages.find]
 include = [
