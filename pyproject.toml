@@ -30,6 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8,<9", "pytest-cov>=6,<7", "ruff>=0.12,<1", "mypy>=1.17,<2", "httpx>=0.28,<1"]
 ocr = ["pytesseract>=0.3.13,<1"]
+ner = ["spacy>=3.8,<3.9"]
 
 [tool.ruff]
 line-length = 100
@@ -64,8 +65,6 @@ exclude = [
   "demo.*",
   "alembic",
   "alembic.*",
-  "compliance",
-  "compliance.*",
   "DataGuardAI",
   "DataGuardAI.*",
 ]
