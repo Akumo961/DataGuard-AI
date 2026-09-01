@@ -7,6 +7,8 @@ DataGuard Québec is a production-oriented engineering foundation for discoverin
 The project is designed around a clear principle: **privacy automation should be explainable, testable, tenant-aware, and reviewable by humans.**
 
 > **Important:** DataGuard does not automatically establish legal compliance, certification, government approval, or regulatory conformity. Compliance controls and reports require organizational and qualified legal/privacy review.
+>
+> **Identity boundary:** production deployments delegate authentication to an external OIDC provider. The repository's `/api/v1/auth/register` and `/api/v1/auth/login` endpoints are intentionally limited to `DATAGUARD_ENVIRONMENT=development` for local testing only; they are not a production identity service.
 
 ## Why DataGuard?
 
@@ -16,14 +18,16 @@ Privacy teams often need to identify sensitive information across documents, und
 
 - FastAPI application with versioned APIs
 - Multi-layer PII detection architecture with deterministic pattern/context rules
+- Optional lightweight multilingual spaCy NER for PERSON/LOCATION/ORGANIZATION detection
 - Deterministic and explainable privacy risk scoring
 - PostgreSQL / SQLAlchemy / Alembic persistence foundations
 - PostgreSQL Row-Level Security (RLS) migration support for tenant isolation
 - JWT authentication and tenant-aware authorization boundaries
+- Development-only local registration/login; production identity delegated to OIDC
 - PIA workflow and state-transition model
 - Versioned Québec, Canadian, GDPR, and CCPA control definitions
 - Document extraction, validation, and OCR interfaces
-- Audit and evidence service foundation
+- Audit and evidence service foundation, including tenant-scoped integrity verification
 - Responsive enterprise web dashboard
 - Automated unit, API, security, and domain tests
 - GitHub Actions quality workflow
@@ -93,11 +97,11 @@ Audit Evidence
 
 ## Detection and AI/ML boundary
 
-The current production analysis path is **deterministic and explainable**. It uses pattern and contextual rules rather than claiming a trained transformer model is running in production.
+The current production analysis path is **deterministic plus an optional configured NER model**. The multilingual NER path uses the lightweight `xx_ent_wiki_sm` spaCy model when `DATAGUARD_NER_MODEL` is configured. Its checked-in synthetic benchmark reports precision/recall/F1 at runtime; the repository does not treat model-card metrics or synthetic results as a government-use accuracy guarantee.
 
 The repository contains legacy/prototype AI/ML artifacts, but these are not treated as trained production models or validation evidence. No production accuracy claim is made from those artifacts.
 
-A future model-backed detector should only be presented as production AI after reproducible datasets, model provenance, measured precision/recall/F1, per-class error analysis, and human-review controls are available.
+A model-backed detector should only be presented as production AI after reproducible datasets, model provenance, measured precision/recall/F1, per-class error analysis, and human-review controls are available.
 
 ### No unsupported accuracy claims
 
