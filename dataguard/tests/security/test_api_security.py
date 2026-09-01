@@ -1,4 +1,4 @@
-import os
+from datetime import datetime, timezone
 
 import jwt
 import pytest
@@ -17,7 +17,17 @@ def test_missing_bearer_token_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_valid_token_produces_tenant_principal(monkeypatch: pytest.MonkeyPatch) -> None:
     secret = "test-secret"
     monkeypatch.setenv("DATAGUARD_JWT_SECRET", secret)
-    token = jwt.encode({"sub": "user-1", "org_id": "org-1", "roles": ["analyst"], "exp": 4102444800}, secret, algorithm="HS256")
+    token = jwt.encode(
+        {
+            "sub": "user-1",
+            "org_id": "org-1",
+            "roles": ["analyst"],
+            "iat": datetime.now(timezone.utc),
+            "exp": 4102444800,
+        },
+        secret,
+        algorithm="HS256",
+    )
     principal = get_principal(f"Bearer {token}")
     assert principal.subject == "user-1"
     assert principal.organization_id == "org-1"
