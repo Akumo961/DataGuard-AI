@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Uuid, event, text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from dataguard.database.base import Base, TenantScopedMixin, TimestampMixin, UUIDPrimaryKeyMixin
 
@@ -117,8 +117,6 @@ class AuditEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
 def _hash_audit_event(mapper, connection, target: AuditEvent) -> None:
     """Serialize every audit insert into an organization-scoped hash chain."""
     org = str(target.organization_id)
-    # PostgreSQL advisory locks serialize writers for the same tenant. SQLite/test
-    # databases skip the lock but retain deterministic hashing.
     if connection.dialect.name == "postgresql":
         connection.execute(text("SELECT pg_advisory_xact_lock(hashtext(:org))"), {"org": org})
     previous = connection.execute(
