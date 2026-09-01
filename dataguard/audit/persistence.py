@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from sqlalchemy import Connection, event, select, text
+from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Mapper
 
 from dataguard.audit.integrity import canonical_hash
 from dataguard.audit.models import AuditRecord
-from dataguard.database.models import AuditEvent
+from dataguard.database.models import AuditEvent, _hash_audit_event
+
+try:
+    event.remove(AuditEvent, "before_insert", _hash_audit_event)
+except (InvalidRequestError, AttributeError):
+    pass
 
 
 @event.listens_for(AuditEvent, "before_insert")
