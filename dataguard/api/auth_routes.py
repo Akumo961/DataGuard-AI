@@ -20,9 +20,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 class RegisterRequest(BaseModel):
     organization_name: str = Field(min_length=2, max_length=255)
-    organization_slug: str = Field(
-        min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]+$"
-    )
+    organization_slug: str = Field(min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]+$")
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=12, max_length=1024)
     display_name: str = Field(min_length=1, max_length=255)
@@ -40,12 +38,12 @@ def _require_development() -> None:
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(
-    request: RegisterRequest, session: AsyncSession = Depends(get_session)
-) -> dict:
+async def register(request: RegisterRequest, session: AsyncSession = Depends(get_session)) -> dict:
     _require_development()
     email = request.email.strip().lower()
-    organization = Organization(slug=request.organization_slug, name=request.organization_name.strip())
+    organization = Organization(
+        slug=request.organization_slug, name=request.organization_name.strip()
+    )
     session.add(organization)
     user = User(
         organization=organization,
@@ -68,9 +66,7 @@ async def register(
 
 
 @router.post("/login")
-async def login(
-    request: LoginRequest, session: AsyncSession = Depends(get_session)
-) -> dict:
+async def login(request: LoginRequest, session: AsyncSession = Depends(get_session)) -> dict:
     _require_development()
     email = request.email.strip().lower()
     row = (
