@@ -23,9 +23,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         client = request.client.host if request.client else "unknown"
         key = f"ratelimit:{client}:{request.url.path}"
+        redis = getattr(request.app.state, "redis", None)
+        limiter = self._redis_limiter
+        if limiter is None and redis is not None:
+            limiter = RedisRateLimiter(redis)
         try:
-            if self._redis_limiter:
-                allowed = await self._redis_limiter.allow(key, self._limit)
+            if limiter is not None:
+                allowed = await limiter.allow(key, self._limit)
             else:
                 settings = get_settings()
                 if settings.environment == "production":
