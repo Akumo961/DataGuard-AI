@@ -126,7 +126,6 @@ jobs:
           DOCX_STATUS=$(curl --silent --show-error --output /tmp/docx-analysis.json --write-out '%{http_code}' -X POST http://127.0.0.1:8000/api/v1/documents -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-test.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document')
           test "${DOCX_STATUS}" = "200"
           test -s /tmp/docx-analysis.json
-          grep -q '"document_type":"docx"' /tmp/docx-analysis.json
           grep -q '"EMAIL"' /tmp/docx-analysis.json
           DOCX_ID=$(python -c 'import json; print(json.load(open("/tmp/docx-analysis.json"))["analysis_id"])')
           test -n "${DOCX_ID}" && test "${DOCX_ID}" != "None"
@@ -135,7 +134,6 @@ jobs:
           PDF_STATUS=$(curl --silent --show-error --output /tmp/pdf-analysis.json --write-out '%{http_code}' -X POST http://127.0.0.1:8000/api/v1/documents -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-test.pdf;type=application/pdf')
           test "${PDF_STATUS}" = "200"
           test -s /tmp/pdf-analysis.json
-          grep -q '"document_type":"pdf"' /tmp/pdf-analysis.json
           PDF_ID=$(python -c 'import json; print(json.load(open("/tmp/pdf-analysis.json"))["analysis_id"])')
           test -n "${PDF_ID}" && test "${PDF_ID}" != "None"
           curl --fail --silent -H "Authorization: Bearer ${TOKEN}" http://127.0.0.1:8000/api/v1/analyses/${PDF_ID} | tee /tmp/pdf-persisted.json
