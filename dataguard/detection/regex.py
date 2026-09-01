@@ -19,7 +19,7 @@ _H = r"[ \t]"
 _NAME = r"[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ'’-]+"
 _STREET_TYPES = (
     r"(?:street|st\.?|avenue|ave\.?|road|rd\.?|boulevard|blvd\.?|drive|dr\.?|lane|ln\.?|"
-    r"route|chemin|rue|avenue|av\.?|boulevard|boul\.?|chemin|montée|place|pl\.?|rang)"
+    r"route|chemin|rue|av\.?|boul\.?|montée|place|pl\.?|rang)"
 )
 _CITY = r"[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ .'-]{1,60}"
 
@@ -86,9 +86,6 @@ class RegexPIIDetector(DetectionEngine):
         ),
     )
 
-    # Contextual rules deliberately do not require a field label. They target
-    # high-signal civic addresses and person-name forms while avoiding a broad
-    # "any two capitalized words" heuristic that creates excessive false positives.
     _contextual_rules = (
         PatternRule(
             PIIType.PERSON,
@@ -103,7 +100,7 @@ class RegexPIIDetector(DetectionEngine):
             PIIType.PERSON,
             re.compile(
                 rf"(?i)\b(?:first name|last name|given name|family name|nom de famille|prénom)"
-                rf"{_H}+(?:is|est|:)??{_H}*({_NAME}(?:{_H}+{_NAME}){{0,2}})\b"
+                rf"(?:{_H}+(?:is|est)|{_H}*:)??{_H}*({_NAME}(?:{_H}+{_NAME}){{0,2}})\b"
             ),
             0.88,
             1,
@@ -148,9 +145,7 @@ class RegexPIIDetector(DetectionEngine):
                     digits = re.sub(r"\D", "", value)
                     if digits[:3] == "000" or digits[0] in "89":
                         continue
-                detections.append(
-                    Detection(rule.pii_type, start, end, confidence, self.name, value)
-                )
+                detections.append(Detection(rule.pii_type, start, end, confidence, self.name, value))
         return _deduplicate(detections)
 
     @staticmethod
