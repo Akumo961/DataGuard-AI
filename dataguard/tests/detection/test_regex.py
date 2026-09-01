@@ -1,5 +1,5 @@
-from dataguard.detection.regex import RegexPIIDetector
 from dataguard.detection.pipeline import PIIDetectionPipeline
+from dataguard.detection.regex import RegexPIIDetector
 from dataguard.domain.models import PIIType
 
 
