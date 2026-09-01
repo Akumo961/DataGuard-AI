@@ -1,18 +1,24 @@
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PYTHONUNBUFFERED=1
 
-RUN useradd --create-home --uid 10001 dataguard
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 10001 dataguard
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
 COPY dataguard ./dataguard
 COPY compliance ./compliance
 COPY docs ./docs
+COPY alembic.ini ./alembic.ini
+COPY alembic ./alembic
 
-RUN python -m pip install --upgrade pip && pip install . && chown -R dataguard:dataguard /app
+RUN python -m pip install --upgrade pip \
+    && pip install '.[ocr]' \
+    && chown -R dataguard:dataguard /app
 
 USER 10001
 EXPOSE 8000
@@ -20,4 +26,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)"
 
-CMD ["uvicorn", "dataguard.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn dataguard.main:app --host 0.0.0.0 --port 8000"]
