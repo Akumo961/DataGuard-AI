@@ -98,9 +98,6 @@ jobs:
             | tee /tmp/analysis.json
           grep -q '"organization_id":"00000000-0000-0000-0000-000000000042"' /tmp/analysis.json
           test "$(python -c 'import json; print(json.load(open("/tmp/analysis.json"))["analysis_id"])')" != "None"
-      - name: Inspect persisted audit hash inputs
-        run: |
-          docker compose exec -T api python -c 'from dataguard.core.config import get_settings; from sqlalchemy import create_engine,text; import hashlib,json; e=create_engine(get_settings().database_url); r=e.connect().execute(text("SELECT id, occurred_at, actor_id, organization_id, action, object_type, object_id, previous_state, new_state, request_id, ip_address, result, previous_hash, integrity_hash FROM audit_events WHERE organization_id = :org ORDER BY occurred_at DESC LIMIT 1"), {"org":"00000000-0000-0000-0000-000000000042"}).mappings().one(); p={"event_id":str(r["id"]),"timestamp":r["occurred_at"].isoformat(),"user_id":str(r["actor_id"]) if r["actor_id"] else "","organization_id":str(r["organization_id"]),"action":r["action"],"object_type":r["object_type"],"object_id":r["object_id"] or "","previous_state":r["previous_state"],"new_state":r["new_state"],"ip_address":r["ip_address"],"request_id":r["request_id"] or "","result":r["result"],"previous_hash":r["previous_hash"]}; print(json.dumps(p,sort_keys=True,separators=(",",":"),default=str)); print("EXPECTED",hashlib.sha256(json.dumps(p,sort_keys=True,separators=(",",":"),default=str).encode()).hexdigest()); print("STORED",r["integrity_hash"])'
       - name: Verify audit integrity endpoint passes on valid persisted chain
         run: |
           TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000001","org":"00000000-0000-0000-0000-000000000042","roles":["privacy_officer"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
@@ -121,17 +118,17 @@ jobs:
           docker cp "$(docker compose ps -q api):/tmp/dataguard-test.docx" /tmp/dataguard-test.docx
           docker cp "$(docker compose ps -q api):/tmp/dataguard-test.pdf" /tmp/dataguard-test.pdf
           TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000001","org":"00000000-0000-0000-0000-000000000042","roles":["analyst"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
-          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/analyze-document -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-test.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document' | tee /tmp/docx-analysis.json
+          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/documents -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-test.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document' | tee /tmp/docx-analysis.json
           grep -q '"document_type":"docx"' /tmp/docx-analysis.json
           grep -q '"EMAIL"' /tmp/docx-analysis.json
-          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/analyze-document -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-test.pdf;type=application/pdf' | tee /tmp/pdf-analysis.json
+          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/documents -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-test.pdf;type=application/pdf' | tee /tmp/pdf-analysis.json
           grep -q '"document_type":"pdf"' /tmp/pdf-analysis.json
       - name: Verify malicious archive upload is rejected
         run: |
           docker compose exec -T api python -c 'import zipfile; z=zipfile.ZipFile("/tmp/dataguard-bomb.docx", "w"); [z.writestr(f"member-{i}.txt", b"x") for i in range(501)]; z.close()'
           docker cp "$(docker compose ps -q api):/tmp/dataguard-bomb.docx" /tmp/dataguard-bomb.docx
           TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000001","org":"00000000-0000-0000-0000-000000000042","roles":["analyst"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
-          test "$(curl --silent -o /tmp/bomb-response.json -w '%{http_code}' -X POST http://127.0.0.1:8000/api/v1/analyze-document -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-bomb.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document')" = "400"
+          test "$(curl --silent -o /tmp/bomb-response.json -w '%{http_code}' -X POST http://127.0.0.1:8000/api/v1/documents -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-bomb.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document')" = "400"
           grep -q 'too many members' /tmp/bomb-response.json
       - name: Verify tenant isolation
         run: |
