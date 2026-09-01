@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from dataguard.api.app import app
 from dataguard.api.audit_routes import router as audit_router
 from dataguard.api.auth_routes import router as auth_router
+import dataguard.audit.persistence  # noqa: F401
 from dataguard.processing.validation import UnsafeDocumentError
 
 app.include_router(audit_router)
