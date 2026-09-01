@@ -13,6 +13,7 @@ class OCRExtractor:
     def extract(self, filename: str, content: bytes) -> ExtractedDocument:
         try:
             import io
+
             import pytesseract
             from PIL import Image
         except ImportError as exc:
