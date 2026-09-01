@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     api_prefix: str = "/api/v1"
     allowed_origins: list[str] = ["http://localhost:3000"]
-    allowed_hosts: list[str] = ["localhost", "127.0.0.1"]
+    allowed_hosts: list[str] = ["localhost", "127.0.0.1", "testserver"]
     database_url: str = "postgresql+psycopg://dataguard:dataguard@localhost:5432/dataguard"
     redis_url: str = "redis://localhost:6379/0"
     max_upload_bytes: int = Field(default=50 * 1024 * 1024, ge=1_048_576, le=100 * 1024 * 1024)
@@ -66,38 +66,40 @@ class Settings(BaseSettings):
             raise ValueError("OIDC endpoints must use HTTPS")
         return value
 
-    @model_validator(mode="after")
-    def validate_production_security(self) -> Settings:
-        if self.environment.lower() in {"production", "prod"}:
-            if self.jwt_algorithm not in {"RS256", "ES256"}:
-                raise ValueError("Production authentication requires RS256 or ES256")
-            if (
-                not self.oidc_issuer_url
-                or not self.oidc_jwks_url
-                or not self.jwt_issuer
-                or not self.jwt_audience
-            ):
-                raise ValueError(
-                    "Production authentication requires OIDC issuer, JWKS URL, JWT issuer and audience"
-                )
-            if any(origin.startswith("http://") for origin in self.allowed_origins):
-                raise ValueError("Production CORS origins must use HTTPS")
-            if any(
-                host in {"localhost", "127.0.0.1", "[::1]", "testserver"}
-                for host in self.allowed_hosts
-            ):
-                raise ValueError("Production trusted hosts must not contain local/test hosts")
-            if any(host in self.database_url.lower() for host in ("localhost", "127.0.0.1")):
-                raise ValueError("Production database must not use a local loopback host")
-            if any(host in self.redis_url.lower() for host in ("localhost", "127.0.0.1")):
-                raise ValueError("Production Redis must not use a local loopback host")
-            if self.max_request_body_bytes < self.max_upload_bytes:
-                raise ValueError("max_request_body_bytes must be >= max_upload_bytes")
-            if not self.security_headers_enabled:
-                raise ValueError("Production security headers cannot be disabled")
+    def validate_production(self) -> Settings:
+        if self.environment.lower() not in {"production", "prod"}:
+            return self
+        if self.jwt_algorithm not in {"RS256", "ES256"}:
+            raise ValueError("Production authentication requires RS256 or ES256")
+        if (
+            not self.oidc_issuer_url
+            or not self.oidc_jwks_url
+            or not self.jwt_issuer
+            or not self.jwt_audience
+        ):
+            raise ValueError(
+                "Production authentication requires OIDC issuer, JWKS URL, JWT issuer and audience"
+            )
+        if any(origin.startswith("http://") for origin in self.allowed_origins):
+            raise ValueError("Production CORS origins must use HTTPS")
+        if any(
+            host in {"localhost", "127.0.0.1", "[::1]", "testserver"}
+            for host in self.allowed_hosts
+        ):
+            raise ValueError("Production trusted hosts must not contain local/test hosts")
+        if any(host in self.database_url.lower() for host in ("localhost", "127.0.0.1")):
+            raise ValueError("Production database must not use a local loopback host")
+        if any(host in self.redis_url.lower() for host in ("localhost", "127.0.0.1")):
+            raise ValueError("Production Redis must not use a local loopback host")
+        if self.max_request_body_bytes < self.max_upload_bytes:
+            raise ValueError("max_request_body_bytes must be >= max_upload_bytes")
+        if not self.security_headers_enabled:
+            raise ValueError("Production security headers cannot be disabled")
         return self
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    settings.validate_production()
+    return settings
