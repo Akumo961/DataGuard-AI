@@ -1,0 +1,51 @@
+name: DataGuard Disaster Recovery Drill
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  restore-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      POSTGRES_PASSWORD: dataguard-dr-password
+      SECRET_KEY: ci-secret-key-with-more-than-32-characters
+      DATAGUARD_JWT_SECRET: ci-jwt-secret-with-more-than-32-characters
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start PostgreSQL
+        run: docker compose up -d postgres
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            docker compose exec -T postgres pg_isready -U dataguard -d dataguard && exit 0
+            sleep 2
+          done
+          exit 1
+      - name: Apply migrations
+        run: |
+          docker compose run --rm --no-deps \
+            -e DATAGUARD_DATABASE_URL=postgresql+psycopg://dataguard:${POSTGRES_PASSWORD}@host.docker.internal:5432/dataguard \
+            api alembic upgrade head
+      - name: Seed synthetic recovery marker
+        run: docker compose exec -T postgres psql -U dataguard -d dataguard -c "INSERT INTO organizations (id, slug, name, active) VALUES ('00000000-0000-0000-0000-000000000099', 'dr-drill', 'DR Synthetic Marker', true) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name;"
+      - name: Create logical backup
+        run: docker compose exec -T postgres sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U dataguard -d dataguard --format=custom' > /tmp/dataguard-dr.backup
+      - name: Restore into isolated database
+        run: |
+          docker compose exec -T postgres psql -U dataguard -d postgres -c 'DROP DATABASE IF EXISTS dataguard_restore_drill WITH (FORCE);'
+          docker compose exec -T postgres psql -U dataguard -d postgres -c 'CREATE DATABASE dataguard_restore_drill OWNER dataguard;'
+          cat /tmp/dataguard-dr.backup | docker compose exec -T postgres pg_restore -U dataguard -d dataguard_restore_drill --exit-on-error --no-owner
+      - name: Verify recovered data and schema
+        run: |
+          docker compose exec -T postgres psql -U dataguard -d dataguard_restore_drill -tAc "SELECT name FROM organizations WHERE id='00000000-0000-0000-0000-000000000099';" | grep -Fx 'DR Synthetic Marker'
+          docker compose exec -T postgres psql -U dataguard -d dataguard_restore_drill -tAc "SELECT to_regclass('public.audit_events');" | grep -Fx 'audit_events'
+          docker compose exec -T postgres psql -U dataguard -d dataguard_restore_drill -tAc "SELECT to_regclass('public.pia_records');" | grep -Fx 'pia_records'
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v
