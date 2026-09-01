@@ -100,7 +100,8 @@ class RegexPIIDetector(DetectionEngine):
             PIIType.PERSON,
             re.compile(
                 rf"(?i)\b(?:first name|last name|given name|family name|nom de famille|prénom)"
-                rf"(?:{_H}+(?:is|est)|{_H}*:)??{_H}*({_NAME}(?:{_H}+{_NAME}){{0,2}})\b"
+                rf"(?:{_H}+(?:is|est){_H}+|{_H}*:{_H}*)?"
+                rf"({_NAME}(?:{_H}+{_NAME}){{0,2}})\b"
             ),
             0.88,
             1,
