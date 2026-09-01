@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from sqlalchemy import event, select, text
+from sqlalchemy import Connection, event, select, text
 from sqlalchemy.orm import Mapper
-from sqlalchemy.orm.interfaces import ORMExecuteState
 
 from dataguard.audit.integrity import canonical_hash
 from dataguard.audit.models import AuditRecord
@@ -11,7 +10,7 @@ from dataguard.database.models import AuditEvent
 
 @event.listens_for(AuditEvent, "before_insert")
 def _canonicalize_persisted_audit_hash(
-    mapper: Mapper[AuditEvent], connection: ORMExecuteState, target: AuditEvent
+    mapper: Mapper[AuditEvent], connection: Connection, target: AuditEvent
 ) -> None:
     """Write audit hashes using the same canonical representation exposed by verification."""
     del mapper
