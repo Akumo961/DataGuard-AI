@@ -6,6 +6,7 @@ import hashlib
 import json
 
 from alembic import op
+from sqlalchemy import text
 
 revision = "20260901_0007"
 down_revision = "20260901_0006"
@@ -22,7 +23,7 @@ def upgrade() -> None:
     bind = op.get_bind()
     op.execute("ALTER TABLE audit_events DISABLE TRIGGER audit_events_append_only")
     rows = bind.execute(
-        __import__("sqlalchemy").text(
+        text(
             """
             SELECT id, occurred_at, actor_id, organization_id, action, object_type,
                    object_id, previous_state, new_state, ip_address, request_id, result
@@ -53,7 +54,7 @@ def upgrade() -> None:
         }
         integrity_hash = _hash(payload)
         bind.execute(
-            __import__("sqlalchemy").text(
+            text(
                 "UPDATE audit_events SET previous_hash = :previous_hash, integrity_hash = :integrity_hash WHERE id = :id"
             ),
             {
