@@ -69,7 +69,11 @@ def evaluate(model_name: str = "xx_ent_wiki_sm") -> dict[str, object]:
             "fp": fp,
             "fn": fn,
         }
-    macro_f1 = sum(float(item["f1"]) for item in per_class.values()) / len(per_class) if per_class else 0.0
+    macro_f1 = (
+        sum(float(item["f1"]) for item in per_class.values()) / len(per_class)
+        if per_class
+        else 0.0
+    )
     return {
         "model": model_name,
         "cases": len(CASES),
