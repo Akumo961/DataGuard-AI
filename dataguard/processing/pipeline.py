@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataguard.core.config import get_settings
 from dataguard.processing.extractors import (
     CSVExtractor,
     DOCXExtractor,
@@ -15,7 +16,10 @@ from dataguard.processing.validation import DocumentValidator
 
 class DocumentProcessingPipeline:
     def __init__(self, validator: DocumentValidator | None = None) -> None:
-        self.validator = validator or DocumentValidator()
+        self.validator = validator or DocumentValidator(
+            max_bytes=get_settings().max_upload_bytes,
+            allowed_mime_types=set(get_settings().upload_allowed_mime_types),
+        )
         self._extractors = {
             ".pdf": PDFExtractor(),
             ".docx": DOCXExtractor(),
