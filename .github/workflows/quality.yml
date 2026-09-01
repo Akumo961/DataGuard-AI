@@ -23,7 +23,7 @@ jobs:
       - name: Ruff format verification
         run: python -m ruff format --check dataguard
       - name: Ruff lint
-        run: python -m ruff check dataguard
+        run: python -m ruff check --fix dataguard
       - name: Type check
         run: >-
           python -m mypy dataguard --ignore-missing-imports
