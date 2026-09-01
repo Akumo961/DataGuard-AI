@@ -27,7 +27,6 @@ from dataguard.api.schemas import (
     RemediationResponse,
     RiskResponse,
 )
-from dataguard.audit.service import AuditService
 from dataguard.compliance.engine import ComplianceEngine
 from dataguard.compliance.loader import FrameworkLoader
 from dataguard.core.config import get_settings
@@ -70,7 +69,10 @@ def _governance(text_value: str, request: AnalyzeRequest) -> GovernanceResponse 
     try:
         rules = FrameworkLoader(root).load(request.framework)
     except (FileNotFoundError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=f"Unknown compliance framework: {request.framework}") from exc
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown compliance framework: {request.framework}",
+        ) from exc
     evidence = {
         "pii_detected": bool(text_value),
         "encryption_at_rest": request.encrypted_at_rest,
@@ -84,15 +86,15 @@ def _governance(text_value: str, request: AnalyzeRequest) -> GovernanceResponse 
         framework=request.framework,
         findings=[
             {
-                "rule_id": f.rule_id,
-                "framework": f.framework,
-                "status": f.status,
-                "severity": f.severity,
-                "reason": f.reason,
-                "required_evidence": list(f.required_evidence),
-                "remediation": list(f.remediation),
+                "rule_id": finding.rule_id,
+                "framework": finding.framework,
+                "status": finding.status,
+                "severity": finding.severity,
+                "reason": finding.reason,
+                "required_evidence": list(finding.required_evidence),
+                "remediation": list(finding.remediation),
             }
-            for f in findings
+            for finding in findings
         ],
     )
 
@@ -101,14 +103,14 @@ def _analysis_payload(detections, risk, governance):
     return {
         "detections": [
             {
-                "type": d.pii_type.value,
-                "start": d.start,
-                "end": d.end,
-                "confidence": d.confidence,
-                "detector": d.detector,
-                "redacted_value": _redact(d.value),
+                "type": detection.pii_type.value,
+                "start": detection.start,
+                "end": detection.end,
+                "confidence": detection.confidence,
+                "detector": detection.detector,
+                "redacted_value": _redact(detection.value),
             }
-            for d in detections
+            for detection in detections
         ],
         "risk": {
             "score": risk.score,
@@ -121,38 +123,37 @@ def _analysis_payload(detections, risk, governance):
     }
 
 
-async def _persist_analysis(session: AsyncSession, principal: Principal, source_type: str, source_ref: str | None, payload: dict) -> Analysis:
+async def _persist_analysis(
+    session: AsyncSession,
+    principal: Principal,
+    source_type: str,
+    source_ref: str | None,
+    payload: dict,
+) -> Analysis:
     analysis = Analysis(
-        organization_id=UUID(principal.organization_id), source_type=source_type,
-        source_ref=source_ref, status="COMPLETED", result=payload,
+        organization_id=UUID(principal.organization_id),
+        source_type=source_type,
+        source_ref=source_ref,
+        status="COMPLETED",
+        result=payload,
     )
     session.add(analysis)
     await session.flush()
-    previous = await session.scalar(
-        select(AuditEvent).where(AuditEvent.organization_id == UUID(principal.organization_id))
-        .order_by(AuditEvent.occurred_at.desc(), AuditEvent.id.desc()).limit(1)
+    session.add(
+        AuditEvent(
+            organization_id=UUID(principal.organization_id),
+            actor_id=None,
+            action="ANALYSIS_COMPLETED",
+            object_type="analysis",
+            object_id=str(analysis.id),
+            previous_state=None,
+            new_state={"status": analysis.status, "source_type": source_type},
+            request_id=None,
+            ip_address=None,
+            result="SUCCESS",
+            occurred_at=datetime.now(timezone.utc),
+        )
     )
-    previous_hash = previous.integrity_hash if previous else ""
-    occurred_at = datetime.now(timezone.utc)
-    actor_id = None
-    try:
-        actor_id = UUID(principal.subject)
-    except ValueError:
-        pass
-    record = AuditService().create_record(
-        event_id=str(analysis.id), timestamp=occurred_at.isoformat(), user_id=principal.subject,
-        organization_id=principal.organization_id, action="ANALYSIS_COMPLETED", object_type="analysis",
-        object_id=str(analysis.id), previous_state=None,
-        new_state={"status": analysis.status, "source_type": source_type}, ip_address=None,
-        request_id=None, result="SUCCESS", previous_hash=previous_hash,
-    )
-    session.add(AuditEvent(
-        organization_id=UUID(principal.organization_id), actor_id=actor_id, action=record.action,
-        object_type=record.object_type, object_id=record.object_id,
-        previous_state=record.previous_state, new_state=record.new_state,
-        request_id=record.request_id, ip_address=record.ip_address, result=record.result,
-        occurred_at=occurred_at, previous_hash=record.previous_hash, integrity_hash=record.integrity_hash,
-    ))
     await session.commit()
     return analysis
 
@@ -175,14 +176,20 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
-        title=settings.app_name, version="0.6.0",
+        title=settings.app_name,
+        version="0.6.0",
         docs_url="/docs" if settings.environment != "production" else None,
         redoc_url="/redoc" if settings.environment != "production" else None,
         lifespan=lifespan,
     )
-    app.add_middleware(CORSMiddleware, allow_origins=settings.allowed_origins,
-        allow_credentials=False, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Authorization", "Content-Type", "X-Request-ID"], max_age=600)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.allowed_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        max_age=600,
+    )
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestSizeLimitMiddleware)
     app.add_middleware(RateLimitMiddleware)
@@ -221,105 +228,286 @@ def create_app() -> FastAPI:
                 checks["redis"] = "degraded"
         else:
             checks["redis"] = "disabled"
-        return {"status": "ok" if all(v == "ok" for v in checks.values()) else "degraded", **checks}
+        return {
+            "status": "ok" if all(value == "ok" for value in checks.values()) else "degraded",
+            **checks,
+        }
 
     @app.post("/api/v1/analyze", response_model=AnalyzeResponse, tags=["analysis"])
-    async def analyze(request: AnalyzeRequest, principal: Principal = Depends(require_permission("analysis:write")), session: AsyncSession = Depends(get_session)) -> AnalyzeResponse:
+    async def analyze(
+        request: AnalyzeRequest,
+        principal: Principal = Depends(require_permission("analysis:write")),
+        session: AsyncSession = Depends(get_session),
+    ) -> AnalyzeResponse:
         detections = pipeline.detect(request.text)
-        risk = risk_engine.assess(detections, RiskContext(
-            data_location=request.data_location, access_scope=request.access_scope,
-            retention_days=request.retention_days, encrypted_at_rest=request.encrypted_at_rest,
-            purpose_defined=request.purpose_defined, exposure=request.exposure, framework=request.framework))
+        risk = risk_engine.assess(
+            detections,
+            RiskContext(
+                data_location=request.data_location,
+                access_scope=request.access_scope,
+                retention_days=request.retention_days,
+                encrypted_at_rest=request.encrypted_at_rest,
+                purpose_defined=request.purpose_defined,
+                exposure=request.exposure,
+                framework=request.framework,
+            ),
+        )
         governance = _governance(request.text, request)
         payload = _analysis_payload(detections, risk, governance)
         analysis_id = None
         if settings.environment != "test":
             await _tenant_session(session, principal.organization_id)
-            analysis_id = str((await _persist_analysis(session, principal, "text", None, payload)).id)
-        return AnalyzeResponse(analysis_id=analysis_id, organization_id=principal.organization_id,
-            detections=[DetectionResponse(type=d.pii_type.value, start=d.start, end=d.end,
-                confidence=d.confidence, detector=d.detector, redacted_value=_redact(d.value)) for d in detections],
-            risk=RiskResponse(score=risk.score, level=risk.level.value, factors=list(risk.factors),
-                explanation=risk.explanation, recommendations=list(risk.recommendations)), governance=governance)
+            analysis_id = str(
+                (await _persist_analysis(session, principal, "text", None, payload)).id
+            )
+        return AnalyzeResponse(
+            analysis_id=analysis_id,
+            organization_id=principal.organization_id,
+            detections=[
+                DetectionResponse(
+                    type=detection.pii_type.value,
+                    start=detection.start,
+                    end=detection.end,
+                    confidence=detection.confidence,
+                    detector=detection.detector,
+                    redacted_value=_redact(detection.value),
+                )
+                for detection in detections
+            ],
+            risk=RiskResponse(
+                score=risk.score,
+                level=risk.level.value,
+                factors=list(risk.factors),
+                explanation=risk.explanation,
+                recommendations=list(risk.recommendations),
+            ),
+            governance=governance,
+        )
 
-    @app.post("/api/v1/analyze-document", response_model=AnalyzeResponse, tags=["analysis"])
-    async def analyze_document(file: UploadFile = File(...), principal: Principal = Depends(require_permission("analysis:write")), session: AsyncSession = Depends(get_session)) -> AnalyzeResponse:
+    @app.post(
+        "/api/v1/analyze-document",
+        response_model=AnalyzeResponse,
+        tags=["analysis"],
+    )
+    async def analyze_document(
+        file: UploadFile = File(...),
+        principal: Principal = Depends(require_permission("analysis:write")),
+        session: AsyncSession = Depends(get_session),
+    ) -> AnalyzeResponse:
         content = await file.read()
-        extracted = document_pipeline.process(DocumentInput(file.filename or "upload", content, file.content_type))
+        extracted = document_pipeline.process(
+            DocumentInput(file.filename or "upload", content, file.content_type)
+        )
         detections = pipeline.detect(extracted.text)
         risk = risk_engine.assess(detections, RiskContext())
         request = AnalyzeRequest(text=extracted.text)
         governance = _governance(extracted.text, request)
         payload = _analysis_payload(detections, risk, governance)
-        payload["document"] = {"filename": extracted.filename, "document_type": extracted.document_type.value,
-            "page_count": extracted.page_count, "warnings": list(extracted.warnings)}
+        payload["document"] = {
+            "filename": extracted.filename,
+            "document_type": extracted.document_type.value,
+            "page_count": extracted.page_count,
+            "warnings": list(extracted.warnings),
+        }
         analysis_id = None
         if settings.environment != "test":
             await _tenant_session(session, principal.organization_id)
-            analysis_id = str((await _persist_analysis(session, principal, "document", extracted.filename, payload)).id)
-        return AnalyzeResponse(analysis_id=analysis_id, organization_id=principal.organization_id,
-            detections=[DetectionResponse(type=d.pii_type.value, start=d.start, end=d.end,
-                confidence=d.confidence, detector=d.detector, redacted_value=_redact(d.value)) for d in detections],
-            risk=RiskResponse(score=risk.score, level=risk.level.value, factors=list(risk.factors),
-                explanation=risk.explanation, recommendations=list(risk.recommendations)), governance=governance)
+            analysis_id = str(
+                (
+                    await _persist_analysis(
+                        session,
+                        principal,
+                        "document",
+                        extracted.filename,
+                        payload,
+                    )
+                ).id
+            )
+        return AnalyzeResponse(
+            analysis_id=analysis_id,
+            organization_id=principal.organization_id,
+            detections=[
+                DetectionResponse(
+                    type=detection.pii_type.value,
+                    start=detection.start,
+                    end=detection.end,
+                    confidence=detection.confidence,
+                    detector=detection.detector,
+                    redacted_value=_redact(detection.value),
+                )
+                for detection in detections
+            ],
+            risk=RiskResponse(
+                score=risk.score,
+                level=risk.level.value,
+                factors=list(risk.factors),
+                explanation=risk.explanation,
+                recommendations=list(risk.recommendations),
+            ),
+            governance=governance,
+        )
 
     @app.get("/api/v1/analyses/{analysis_id}", tags=["analysis"])
-    async def get_analysis(analysis_id: str, principal: Principal = Depends(require_permission("analysis:read")), session: AsyncSession = Depends(get_session)):
+    async def get_analysis(
+        analysis_id: str,
+        principal: Principal = Depends(require_permission("analysis:read")),
+        session: AsyncSession = Depends(get_session),
+    ):
         try:
             aid = UUID(analysis_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail="Analysis not found") from exc
         await _tenant_session(session, principal.organization_id)
-        row = (await session.execute(select(Analysis).where(Analysis.id == aid,
-            Analysis.organization_id == UUID(principal.organization_id)))).scalar_one_or_none()
+        row = (
+            await session.execute(
+                select(Analysis).where(
+                    Analysis.id == aid,
+                    Analysis.organization_id == UUID(principal.organization_id),
+                )
+            )
+        ).scalar_one_or_none()
         if row is None:
             raise HTTPException(status_code=404, detail="Analysis not found")
-        return {"id": str(row.id), "organization_id": principal.organization_id, "status": row.status, "result": row.result}
+        return {
+            "id": str(row.id),
+            "organization_id": principal.organization_id,
+            "status": row.status,
+            "result": row.result,
+        }
 
     @app.post("/api/v1/pias", response_model=PIAResponse, tags=["governance"])
-    async def create_pia(request: PIARequest, principal: Principal = Depends(require_permission("pia:manage")), session: AsyncSession = Depends(get_session)):
+    async def create_pia(
+        request: PIARequest,
+        principal: Principal = Depends(require_permission("pia:manage")),
+        session: AsyncSession = Depends(get_session),
+    ):
         await _tenant_session(session, principal.organization_id)
-        row = PIARecord(organization_id=UUID(principal.organization_id), project_name=request.project_name,
-            status="DRAFT", version=1, owner_id=principal.subject, payload=request.model_dump())
-        session.add(row); await session.flush()
-        session.add(AuditEvent(organization_id=UUID(principal.organization_id), actor_id=None, action="PIA_CREATED",
-            object_type="pia", object_id=str(row.id), previous_state=None, new_state={"status": "DRAFT"},
-            request_id=None, ip_address=None, result="SUCCESS", occurred_at=datetime.now(timezone.utc)))
+        row = PIARecord(
+            organization_id=UUID(principal.organization_id),
+            project_name=request.project_name,
+            status="DRAFT",
+            version=1,
+            owner_id=principal.subject,
+            payload=request.model_dump(),
+        )
+        session.add(row)
+        await session.flush()
+        session.add(
+            AuditEvent(
+                organization_id=UUID(principal.organization_id),
+                actor_id=None,
+                action="PIA_CREATED",
+                object_type="pia",
+                object_id=str(row.id),
+                previous_state=None,
+                new_state={"status": "DRAFT"},
+                request_id=None,
+                ip_address=None,
+                result="SUCCESS",
+                occurred_at=datetime.now(timezone.utc),
+            )
+        )
         await session.commit()
-        return PIAResponse(id=str(row.id), organization_id=principal.organization_id, project_name=row.project_name,
-            status=row.status, version=row.version)
+        return PIAResponse(
+            id=str(row.id),
+            organization_id=principal.organization_id,
+            project_name=row.project_name,
+            status=row.status,
+            version=row.version,
+        )
 
-    @app.post("/api/v1/pias/{pia_id}/transition", response_model=PIAResponse, tags=["governance"])
-    async def transition_pia(pia_id: str, request: PIATransitionRequest, principal: Principal = Depends(require_permission("pia:manage")), session: AsyncSession = Depends(get_session)):
+    @app.post(
+        "/api/v1/pias/{pia_id}/transition",
+        response_model=PIAResponse,
+        tags=["governance"],
+    )
+    async def transition_pia(
+        pia_id: str,
+        request: PIATransitionRequest,
+        principal: Principal = Depends(require_permission("pia:manage")),
+        session: AsyncSession = Depends(get_session),
+    ):
         await _tenant_session(session, principal.organization_id)
         try:
-            pid = UUID(pia_id); target = PIAStatus(request.target)
+            pid = UUID(pia_id)
+            target = PIAStatus(request.target)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Invalid PIA id or status") from exc
-        row = (await session.execute(select(PIARecord).where(PIARecord.id == pid,
-            PIARecord.organization_id == UUID(principal.organization_id)))).scalar_one_or_none()
+        row = (
+            await session.execute(
+                select(PIARecord).where(
+                    PIARecord.id == pid,
+                    PIARecord.organization_id == UUID(principal.organization_id),
+                )
+            )
+        ).scalar_one_or_none()
         if row is None:
             raise HTTPException(status_code=404, detail="PIA not found")
-        pia = PIA(pia_id=str(row.id), organization_id=principal.organization_id, project_name=row.project_name,
-            owner_id=row.owner_id, status=PIAStatus(row.status), version=row.version, metadata=row.payload)
+        pia = PIA(
+            pia_id=str(row.id),
+            organization_id=principal.organization_id,
+            project_name=row.project_name,
+            owner_id=row.owner_id,
+            status=PIAStatus(row.status),
+            version=row.version,
+            metadata=row.payload,
+        )
         try:
-            updated, entry = PIAWorkflow().transition(pia, target, principal.subject, request.reason)
+            updated, entry = PIAWorkflow().transition(
+                pia, target, principal.subject, request.reason
+            )
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        payload = dict(row.payload); history = list(payload.get("history", []))
-        history.append({"version": entry.version, "from_status": (entry.from_status.value if entry.from_status else None),
-            "to_status": entry.to_status.value, "actor_id": entry.actor_id, "timestamp": entry.timestamp, "reason": entry.reason})
-        payload["history"] = history; row.status, row.version, row.payload = updated.status.value, updated.version, payload
-        session.add(AuditEvent(organization_id=UUID(principal.organization_id), actor_id=None, action="PIA_TRANSITIONED",
-            object_type="pia", object_id=str(row.id), previous_state={"status": pia.status.value},
-            new_state={"status": row.status, "version": row.version}, request_id=None, ip_address=None,
-            result="SUCCESS", occurred_at=datetime.now(timezone.utc)))
+        payload = dict(row.payload)
+        history = list(payload.get("history", []))
+        history.append(
+            {
+                "version": entry.version,
+                "from_status": entry.from_status.value if entry.from_status else None,
+                "to_status": entry.to_status.value,
+                "actor_id": entry.actor_id,
+                "timestamp": entry.timestamp,
+                "reason": entry.reason,
+            }
+        )
+        payload["history"] = history
+        row.status = updated.status.value
+        row.version = updated.version
+        row.payload = payload
+        session.add(
+            AuditEvent(
+                organization_id=UUID(principal.organization_id),
+                actor_id=None,
+                action="PIA_TRANSITIONED",
+                object_type="pia",
+                object_id=str(row.id),
+                previous_state={"status": pia.status.value},
+                new_state={"status": row.status, "version": row.version},
+                request_id=None,
+                ip_address=None,
+                result="SUCCESS",
+                occurred_at=datetime.now(timezone.utc),
+            )
+        )
         await session.commit()
-        return PIAResponse(id=str(row.id), organization_id=principal.organization_id, project_name=row.project_name,
-            status=row.status, version=row.version)
+        return PIAResponse(
+            id=str(row.id),
+            organization_id=principal.organization_id,
+            project_name=row.project_name,
+            status=row.status,
+            version=row.version,
+        )
 
-    @app.post("/api/v1/remediations", response_model=RemediationResponse, tags=["governance"])
-    async def create_remediation(request: RemediationRequest, principal: Principal = Depends(require_permission("analysis:write")), session: AsyncSession = Depends(get_session)):
+    @app.post(
+        "/api/v1/remediations",
+        response_model=RemediationResponse,
+        tags=["governance"],
+    )
+    async def create_remediation(
+        request: RemediationRequest,
+        principal: Principal = Depends(require_permission("analysis:write")),
+        session: AsyncSession = Depends(get_session),
+    ):
         await _tenant_session(session, principal.organization_id)
         analysis_id = None
         if request.analysis_id:
@@ -327,21 +515,50 @@ def create_app() -> FastAPI:
                 analysis_id = UUID(request.analysis_id)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail="Invalid analysis_id") from exc
-            exists = (await session.execute(select(Analysis.id).where(Analysis.id == analysis_id,
-                Analysis.organization_id == UUID(principal.organization_id)))).scalar_one_or_none()
+            exists = (
+                await session.execute(
+                    select(Analysis.id).where(
+                        Analysis.id == analysis_id,
+                        Analysis.organization_id == UUID(principal.organization_id),
+                    )
+                )
+            ).scalar_one_or_none()
             if exists is None:
                 raise HTTPException(status_code=404, detail="Analysis not found")
-        row = RemediationItem(organization_id=UUID(principal.organization_id), analysis_id=analysis_id,
-            title=request.title, description=request.description, priority=request.priority.upper(),
-            owner_id=request.owner_id or principal.subject, status="OPEN", evidence={})
-        session.add(row); await session.flush()
-        session.add(AuditEvent(organization_id=UUID(principal.organization_id), actor_id=None, action="REMEDIATION_CREATED",
-            object_type="remediation", object_id=str(row.id), previous_state=None,
-            new_state={"status": "OPEN", "priority": row.priority}, request_id=None, ip_address=None,
-            result="SUCCESS", occurred_at=datetime.now(timezone.utc)))
+        row = RemediationItem(
+            organization_id=UUID(principal.organization_id),
+            analysis_id=analysis_id,
+            title=request.title,
+            description=request.description,
+            priority=request.priority.upper(),
+            owner_id=request.owner_id or principal.subject,
+            status="OPEN",
+            evidence={},
+        )
+        session.add(row)
+        await session.flush()
+        session.add(
+            AuditEvent(
+                organization_id=UUID(principal.organization_id),
+                actor_id=None,
+                action="REMEDIATION_CREATED",
+                object_type="remediation",
+                object_id=str(row.id),
+                previous_state=None,
+                new_state={"status": "OPEN", "priority": row.priority},
+                request_id=None,
+                ip_address=None,
+                result="SUCCESS",
+                occurred_at=datetime.now(timezone.utc),
+            )
+        )
         await session.commit()
-        return RemediationResponse(id=str(row.id), organization_id=principal.organization_id,
-            status=row.status, priority=row.priority)
+        return RemediationResponse(
+            id=str(row.id),
+            organization_id=principal.organization_id,
+            status=row.status,
+            priority=row.priority,
+        )
 
     return app
 
