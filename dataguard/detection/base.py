@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+
 from dataguard.domain.models import Detection
 
 
