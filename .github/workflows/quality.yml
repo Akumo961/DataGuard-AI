@@ -20,8 +20,12 @@ jobs:
           cache: pip
       - name: Install
         run: python -m pip install --upgrade pip && python -m pip install -e ".[dev,ocr]"
+      - name: Ruff format
+        run: python -m ruff format dataguard
       - name: Ruff format verification
         run: python -m ruff format --check dataguard
+      - name: Ruff safe autofix
+        run: python -m ruff check dataguard --fix
       - name: Ruff lint
         run: python -m ruff check dataguard
       - name: Type check
