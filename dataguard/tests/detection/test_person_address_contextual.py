@@ -5,9 +5,7 @@ from dataguard.domain.models import PIIType
 def test_person_detected_without_field_label() -> None:
     detections = RegexPIIDetector().detect("Please contact Dr Jean Tremblay about the request.")
     assert any(
-        d.pii_type is PIIType.PERSON
-        and d.value is not None
-        and "Jean Tremblay" in d.value
+        d.pii_type is PIIType.PERSON and d.value is not None and "Jean Tremblay" in d.value
         for d in detections
     )
 
