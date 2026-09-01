@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from collections import defaultdict
 import json
 from dataclasses import dataclass
 
@@ -54,11 +53,11 @@ def evaluate(model_name: str = "xx_ent_wiki_sm") -> dict[str, object]:
     for label in labels:
         tp = fp = fn = 0
         for case in CASES:
-            expected = set(case.expected)
-            predicted = _spans(case.text, detector)
-            tp += int(bool({item for item in predicted if item[0] == label} & expected))
-            fp += len({item for item in predicted if item[0] == label} - expected)
-            fn += len({item for item in expected if item[0] == label} - predicted)
+            expected = {item for item in case.expected if item[0] == label}
+            predicted = {item for item in _spans(case.text, detector) if item[0] == label}
+            tp += len(predicted & expected)
+            fp += len(predicted - expected)
+            fn += len(expected - predicted)
         precision = tp / (tp + fp) if tp + fp else 1.0
         recall = tp / (tp + fn) if tp + fn else 1.0
         f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
