@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 
 from dataguard.pia.models import PIA, PIAHistoryEntry, PIAStatus
 
-
 _ALLOWED: dict[PIAStatus, frozenset[PIAStatus]] = {
     PIAStatus.DRAFT: frozenset({PIAStatus.IN_REVIEW}),
     PIAStatus.IN_REVIEW: frozenset(
