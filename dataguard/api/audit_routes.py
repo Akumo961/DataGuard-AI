@@ -27,12 +27,16 @@ async def audit_integrity(
         {"org": principal.organization_id},
     )
     rows = (
-        await session.execute(
-            select(AuditEvent)
-            .where(AuditEvent.organization_id == organization_id)
-            .order_by(AuditEvent.occurred_at.asc(), AuditEvent.id.asc())
+        (
+            await session.execute(
+                select(AuditEvent)
+                .where(AuditEvent.organization_id == organization_id)
+                .order_by(AuditEvent.occurred_at.asc(), AuditEvent.id.asc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     records = [
         AuditRecord(
             event_id=str(row.id),
