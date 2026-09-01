@@ -1,6 +1,6 @@
 # DataGuard Québec
 
-> **Enterprise AI-assisted privacy, PII discovery, risk assessment, and compliance workflow platform.**
+> **Enterprise privacy automation, PII discovery, risk assessment, and compliance workflow platform.**
 
 DataGuard Québec is a production-oriented engineering foundation for discovering and classifying sensitive information, assessing privacy risk, supporting Privacy Impact Assessment (PIA) workflows, applying configurable compliance controls, and maintaining auditable evidence.
 
@@ -10,14 +10,14 @@ The project is designed around a clear principle: **privacy automation should be
 
 ## Why DataGuard?
 
-Privacy teams often need to identify sensitive information across documents, understand the associated risk, map findings to applicable controls, and preserve evidence for review. DataGuard demonstrates how these workflows can be implemented as an integrated AI-enabled software platform rather than as a standalone model.
+Privacy teams often need to identify sensitive information across documents, understand the associated risk, map findings to applicable controls, and preserve evidence for review. DataGuard provides an engineering foundation for these workflows, with deterministic PII detection and explainable risk assessment as the currently implemented analysis path.
 
 ## Engineering highlights
 
 - FastAPI application with versioned APIs
-- Configurable multi-layer PII detection architecture
+- Multi-layer PII detection architecture with deterministic pattern/context rules
 - Deterministic and explainable privacy risk scoring
-- PostgreSQL / SQLAlchemy / Alembic persistence
+- PostgreSQL / SQLAlchemy / Alembic persistence foundations
 - PostgreSQL Row-Level Security (RLS) migration support for tenant isolation
 - JWT authentication and tenant-aware authorization boundaries
 - PIA workflow and state-transition model
@@ -45,7 +45,7 @@ Privacy teams often need to identify sensitive information across documents, und
                  ┌──────────────┼──────────────┐
                  │              │              │
                  ▼              ▼              ▼
-          Authentication    Application     Audit / Evidence
+          Authentication    Analysis       Audit / Evidence
           + Tenant Context    Services          Services
                                 │
               ┌─────────────────┼──────────────────┐
@@ -91,17 +91,19 @@ PIA / Review Workflow
 Audit Evidence
 ```
 
-## AI / ML architecture
+## Detection and AI/ML boundary
 
-DataGuard is intentionally designed so that deterministic controls and AI/ML components can coexist without making model output the sole source of truth.
+The current production analysis path is **deterministic and explainable**. It uses pattern and contextual rules rather than claiming a trained transformer model is running in production.
 
-The current repository provides the detection architecture, privacy taxonomy, workflow boundaries, and evaluation foundations required for future production ML adoption. Model-backed detection should be introduced only with reproducible datasets, model provenance, measured precision/recall/F1, per-class error analysis, and human review.
+The repository contains legacy/prototype AI/ML artifacts, but these are not treated as trained production models or validation evidence. No production accuracy claim is made from those artifacts.
+
+A future model-backed detector should only be presented as production AI after reproducible datasets, model provenance, measured precision/recall/F1, per-class error analysis, and human-review controls are available.
 
 ### No unsupported accuracy claims
 
-The repository does **not** claim a production PII detection accuracy such as "95%+" because the current repository does not contain sufficient reproducible evidence to support that figure. Historical prototype artifacts containing empty model/data files are not treated as trained production models or validation evidence.
+The repository does **not** claim a production PII detection accuracy such as "95%+" because the current repository does not contain sufficient reproducible evidence to support that figure.
 
-This is intentional: **measured AI performance is more valuable than an unverified benchmark claim.**
+This is intentional: **measured performance is more valuable than an unverified benchmark claim.**
 
 ## Security & privacy
 
@@ -115,6 +117,7 @@ Current engineering controls include:
 - Input validation through Pydantic contracts
 - Audit/evidence foundations
 - Environment-based configuration
+- Security headers, request-size limits, trusted-host controls, and rate limiting
 - Synthetic data for demonstrations
 - Explicit production-data restrictions
 
@@ -158,6 +161,7 @@ Docker
 FastAPI application
    │
    ├── PostgreSQL
+   ├── Redis
    ├── SQLAlchemy / Alembic
    └── Enterprise Web UI
 
@@ -167,44 +171,6 @@ GitHub Actions
 ```
 
 The repository is structured so that production infrastructure can later be deployed using appropriate managed services and security controls.
-
-## Repository structure
-
-```text
-DataGuard/
-├── dataguard/                 # Core application
-├── docs/                      # Architecture, security, privacy, deployment,
-│                              # procurement, testing, governance, etc.
-├── tests/                     # Unit/API/security/domain tests
-├── migrations/                # Database migrations
-├── .github/                   # CI workflows
-├── docker-compose.local.yml   # Local development environment
-└── README.md
-```
-
-## Documentation
-
-The repository contains dedicated documentation covering:
-
-- Architecture
-- Security architecture
-- Threat model
-- Privacy architecture
-- Compliance controls
-- Privacy Impact Assessment (PIA) workflows
-- Deployment
-- Testing
-- Procurement considerations
-- Release governance
-- Government demonstration guidance
-
-Start with the documents under `docs/` for the detailed engineering and operational view.
-
-## Local development
-
-See `docs/DEPLOYMENT.md` and `docker-compose.local.yml` for the supported local setup.
-
-Use **synthetic demonstration data only** during development. Do not upload real personal information to an unapproved environment.
 
 ## Production readiness boundary
 
@@ -216,14 +182,9 @@ DataGuard is an **enterprise product foundation and evaluation candidate**. It s
 - evidence of a government contract
 - evidence of customer deployment
 - a replacement for qualified privacy/legal review
+- an AI/ML system with measured model performance when no such evidence exists
 
-Before processing real sensitive information, the target deployment requires environment-specific security assessment, privacy/legal review, operational validation, appropriate ML evaluation, and acceptance testing.
-
-## Engineering focus
-
-DataGuard demonstrates practical AI engineering across:
-
-**AI/ML architecture · privacy engineering · PII detection · risk scoring · compliance workflows · secure APIs · multi-tenancy · PostgreSQL · testing · Docker · CI/CD · auditability**
+Before processing real sensitive information, the target deployment requires environment-specific security assessment, privacy/legal review, operational validation, appropriate PII evaluation, and acceptance testing.
 
 ## Roadmap
 
