@@ -61,6 +61,28 @@ class Analysis(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     result: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
+class PIARecord(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
+    __tablename__ = "pia_records"
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="DRAFT")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class RemediationItem(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
+    __tablename__ = "remediation_items"
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    analysis_id: Mapped[UUID | None] = mapped_column(ForeignKey("analyses.id", ondelete="SET NULL"), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(String(4000), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="OPEN")
+    priority: Mapped[str] = mapped_column(String(32), nullable=False, default="MEDIUM")
+    owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    evidence: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
 class SecurityEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
     __tablename__ = "security_events"
     organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
