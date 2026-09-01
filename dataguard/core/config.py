@@ -69,13 +69,21 @@ class Settings(BaseSettings):
         if self.environment.lower() in {"production", "prod"}:
             if self.jwt_algorithm not in {"RS256", "ES256"}:
                 raise ValueError("Production authentication requires RS256 or ES256")
-            if not self.oidc_issuer_url or not self.oidc_jwks_url or not self.jwt_issuer or not self.jwt_audience:
+            if (
+                not self.oidc_issuer_url
+                or not self.oidc_jwks_url
+                or not self.jwt_issuer
+                or not self.jwt_audience
+            ):
                 raise ValueError(
                     "Production authentication requires OIDC issuer, JWKS URL, JWT issuer and audience"
                 )
             if any(origin.startswith("http://") for origin in self.allowed_origins):
                 raise ValueError("Production CORS origins must use HTTPS")
-            if any(host in {"localhost", "127.0.0.1", "[::1]", "testserver"} for host in self.allowed_hosts):
+            if any(
+                host in {"localhost", "127.0.0.1", "[::1]", "testserver"}
+                for host in self.allowed_hosts
+            ):
                 raise ValueError("Production trusted hosts must not contain local/test hosts")
             if any(host in self.database_url.lower() for host in ("localhost", "127.0.0.1")):
                 raise ValueError("Production database must not use a local loopback host")
