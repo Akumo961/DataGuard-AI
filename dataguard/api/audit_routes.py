@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dataguard.api.dependencies import Principal, require_permission
@@ -23,9 +23,7 @@ async def audit_integrity(
     """Verify the persisted audit hash chain for the caller's tenant."""
     organization_id = UUID(principal.organization_id)
     await session.execute(
-        __import__("sqlalchemy").text(
-            "SELECT set_config('dataguard.organization_id', :org, true)"
-        ),
+        text("SELECT set_config('dataguard.organization_id', :org, true)"),
         {"org": principal.organization_id},
     )
     rows = (
