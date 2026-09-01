@@ -120,18 +120,14 @@ def _hash_audit_event(mapper, connection, target: AuditEvent) -> None:
     if connection.dialect.name == "postgresql":
         connection.execute(text("SELECT pg_advisory_xact_lock(hashtext(:org))"), {"org": org})
     previous = connection.execute(
-        text(
-            "SELECT integrity_hash FROM audit_events "
-            "WHERE organization_id = :org ORDER BY occurred_at DESC, id DESC LIMIT 1"
-        ),
+        text("SELECT integrity_hash FROM audit_events WHERE organization_id = :org ORDER BY occurred_at DESC, id DESC LIMIT 1"),
         {"org": org},
     ).scalar()
     previous_hash = str(previous or "")
     occurred = target.occurred_at
-    timestamp = occurred.isoformat() if occurred else ""
     payload = {
         "event_id": str(target.id),
-        "timestamp": timestamp,
+        "timestamp": occurred.isoformat() if occurred else "",
         "user_id": str(target.actor_id) if target.actor_id else "",
         "organization_id": org,
         "action": target.action,
@@ -147,6 +143,16 @@ def _hash_audit_event(mapper, connection, target: AuditEvent) -> None:
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
     target.previous_hash = previous_hash
     target.integrity_hash = hashlib.sha256(canonical).hexdigest()
+
+
+@event.listens_for(AuditEvent, "before_update")
+def _reject_audit_update(mapper, connection, target: AuditEvent) -> None:
+    raise RuntimeError("Audit events are append-only and cannot be updated")
+
+
+@event.listens_for(AuditEvent, "before_delete")
+def _reject_audit_delete(mapper, connection, target: AuditEvent) -> None:
+    raise RuntimeError("Audit events are append-only and cannot be deleted")
 
 
 class RefreshToken(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
