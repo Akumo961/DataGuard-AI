@@ -1,6 +1,6 @@
 # PII detection scope and limitations
 
-DataGuard combines deterministic regex/contextual rules with an optional externally supplied NER adapter. Detection is **best-effort discovery**, not a completeness guarantee.
+DataGuard combines deterministic regex/contextual rules with a multilingual NER detector. Detection is **best-effort discovery**, not a completeness guarantee.
 
 ## PERSON
 
@@ -10,14 +10,26 @@ The baseline detector recognizes high-signal forms such as:
 - honorific + name (`Mme Marie Tremblay`, `Dr Jean Tremblay`);
 - explicit name-context phrases (`first name`, `last name`, `nom de famille`).
 
-It intentionally does **not** classify every sequence of capitalized words as a person. This reduces false positives for organizations, departments and document titles.
+For deployments with `DATAGUARD_NER_MODEL=xx_ent_wiki_sm`, DataGuard also loads the lightweight spaCy `xx_ent_wiki_sm` WikiNER model and maps its `PER` label to `PERSON`. This adds plain narrative name detection without replacing the deterministic rules. The model is multilingual, but its output is not a government-use accuracy guarantee.
 
 ## ADDRESS
 
-The detector recognizes high-signal civic-address patterns including street types in English/French and Canadian postal-code context. It does not guarantee detection of every free-form, rural, international, PO-box or malformed address.
+The deterministic detector recognizes high-signal civic-address patterns including street types in English/French and Canadian postal-code context. The NER model is **not** treated as an address detector. DataGuard does not guarantee detection of every free-form, rural, international, PO-box or malformed address.
+
+## NER evaluation
+
+The checked-in synthetic benchmark is `dataguard/evaluation/ner_benchmark.py`. It uses fictional Québec/English names, locations and address-containing prose and computes exact-span precision, recall and F1 per entity type at runtime. No fixed accuracy number is claimed without running that script against the pinned model.
+
+With the optional NER dependency installed and the model available:
+
+```bash
+python -m pip install -e '.[ner]'
+python -m spacy download xx_ent_wiki_sm
+python -m dataguard.evaluation.ner_benchmark --model xx_ent_wiki_sm
+```
+
+The Docker image pins the model wheel by SHA-256 before installation. Production deployments should still evaluate the detector against representative, de-identified customer corpora and monitor precision/recall by PII type.
 
 ## Operational limitation
 
-False negatives and false positives remain possible, especially with OCR errors, unusual formatting, multilingual text and names that resemble ordinary words. Production deployments should evaluate the detector against representative, de-identified customer corpora and monitor precision/recall by PII type.
-
-The optional `NERDetector` is an adapter boundary only; no pretrained NER model is bundled or represented as production-ready. A model must be independently evaluated, mapped to the DataGuard taxonomy and versioned before use.
+False negatives and false positives remain possible, especially with OCR errors, unusual formatting, multilingual text, names that resemble ordinary words, and Québec-specific naming conventions. Human review remains necessary for consequential privacy decisions.
