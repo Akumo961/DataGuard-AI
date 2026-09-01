@@ -88,5 +88,10 @@ class RemediationResponse(BaseModel):
     priority: str
 
 
+class RemediationTransitionRequest(BaseModel):
+    status: str = Field(min_length=1, max_length=32)
+    evidence: dict[str, object] = Field(default_factory=dict)
+
+
 class ErrorResponse(BaseModel):
     detail: str
