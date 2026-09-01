@@ -97,6 +97,25 @@ jobs:
           curl --fail --silent -H "Authorization: Bearer ${TOKEN}" http://127.0.0.1:8000/api/v1/audit/integrity | tee /tmp/audit-integrity-invalid.json
           grep -q '"valid":false' /tmp/audit-integrity-invalid.json
           grep -q '"reason":"integrity_hash_mismatch"' /tmp/audit-integrity-invalid.json
+      - name: Verify document upload pipeline with DOCX and PDF
+        run: |
+          docker compose exec -T api python -c 'from docx import Document; d=Document(); d.add_paragraph("Contact alice@example.com"); d.save("/tmp/dataguard-test.docx")'
+          docker compose exec -T api python -c 'from pypdf import PdfWriter; w=PdfWriter(); w.add_blank_page(width=612, height=792); f=open("/tmp/dataguard-test.pdf", "wb"); w.write(f); f.close()'
+          docker cp "$(docker compose ps -q api):/tmp/dataguard-test.docx" /tmp/dataguard-test.docx
+          docker cp "$(docker compose ps -q api):/tmp/dataguard-test.pdf" /tmp/dataguard-test.pdf
+          TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000001","org":"00000000-0000-0000-0000-000000000042","roles":["analyst"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
+          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/analyze-document -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-test.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document' | tee /tmp/docx-analysis.json
+          grep -q '"document_type":"docx"' /tmp/docx-analysis.json
+          grep -q '"EMAIL"' /tmp/docx-analysis.json
+          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/analyze-document -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-test.pdf;type=application/pdf' | tee /tmp/pdf-analysis.json
+          grep -q '"document_type":"pdf"' /tmp/pdf-analysis.json
+      - name: Verify malicious archive upload is rejected
+        run: |
+          docker compose exec -T api python -c 'import zipfile; z=zipfile.ZipFile("/tmp/dataguard-bomb.docx", "w"); [z.writestr(f"member-{i}.txt", b"x") for i in range(501)]; z.close()'
+          docker cp "$(docker compose ps -q api):/tmp/dataguard-bomb.docx" /tmp/dataguard-bomb.docx
+          TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000001","org":"00000000-0000-0000-0000-000000000042","roles":["analyst"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
+          test "$(curl --silent -o /tmp/bomb-response.json -w '%{http_code}' -X POST http://127.0.0.1:8000/api/v1/analyze-document -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-bomb.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document')" = "400"
+          grep -q 'too many members' /tmp/bomb-response.json
       - name: Verify tenant isolation
         run: |
           TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000002","org":"00000000-0000-0000-0000-000000000043","roles":["analyst"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
