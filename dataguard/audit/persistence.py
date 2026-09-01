@@ -19,12 +19,15 @@ def _canonicalize_persisted_audit_hash(
         text("SELECT pg_advisory_xact_lock(hashtext(:org))"),
         {"org": organization_id},
     )
-    previous_hash = connection.execute(
-        select(AuditEvent.integrity_hash)
-        .where(AuditEvent.organization_id == target.organization_id)
-        .order_by(AuditEvent.occurred_at.desc(), AuditEvent.id.desc())
-        .limit(1)
-    ).scalar_one_or_none() or ""
+    previous_hash = (
+        connection.execute(
+            select(AuditEvent.integrity_hash)
+            .where(AuditEvent.organization_id == target.organization_id)
+            .order_by(AuditEvent.occurred_at.desc(), AuditEvent.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        or ""
+    )
     target.previous_hash = previous_hash
     record = AuditRecord(
         event_id=str(target.id),
