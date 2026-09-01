@@ -19,13 +19,9 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
-      - name: Ruff format
-        run: python -m ruff format dataguard
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev,ocr]"
       - name: Ruff format verification
         run: python -m ruff format --check dataguard
-      - name: Ruff safe autofix
-        run: python -m ruff check dataguard --fix
       - name: Ruff lint
         run: python -m ruff check dataguard
       - name: Type check
@@ -58,4 +54,39 @@ jobs:
       - name: Audit declared dependencies
         run: python -m pip install -e . && python -m pip_audit
 
-# Final CI verification run after packaging, lint, type-check, and test fixes.
+  docker-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start PostgreSQL, Redis and API
+        env:
+          POSTGRES_PASSWORD: dataguard-ci-password
+          SECRET_KEY: ci-secret-key-with-more-than-32-characters
+          DATAGUARD_JWT_SECRET: ci-jwt-secret-with-more-than-32-characters
+        run: docker compose up -d --build
+      - name: Wait for readiness
+        run: |
+          for i in {1..30}; do
+            curl --fail --silent http://127.0.0.1:8000/health/ready && exit 0
+            sleep 3
+          done
+          docker compose logs
+          exit 1
+      - name: Exercise authenticated tenant workflow
+        env:
+          DATAGUARD_JWT_SECRET: ci-jwt-secret-with-more-than-32-characters
+        run: |
+          TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000001","org":"00000000-0000-0000-0000-000000000042","roles":["analyst"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
+          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/analyze \
+            -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
+            -d '{"text":"Email alice@example.com","purpose_defined":true,"encrypted_at_rest":true,"access_scope":"internal","data_location":"quebec"}' \
+            | tee /tmp/analysis.json
+          grep -q '"organization_id":"00000000-0000-0000-0000-000000000042"' /tmp/analysis.json
+          test "$(python -c 'import json; print(json.load(open("/tmp/analysis.json"))["analysis_id"])')" != "None"
+      - name: Collect service logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Stop services
+        if: always()
+        run: docker compose down -v
