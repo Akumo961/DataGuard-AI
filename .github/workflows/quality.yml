@@ -86,6 +86,7 @@ jobs:
             -d '{"organization_slug":"ci-local-auth","email":"dev@example.invalid","password":"local-development-password"}' \
             | tee /tmp/login.json
           grep -q '"token_type":"bearer"' /tmp/login.json
+          test -s /tmp/login.json
           test -n "$(python -c 'import json; print(json.load(open("/tmp/login.json"))["access_token"])')"
       - name: Seed isolated CI tenant
         run: docker compose exec -T postgres psql -U dataguard -d dataguard -c "INSERT INTO organizations (id, slug, name, active) VALUES ('00000000-0000-0000-0000-000000000042', 'ci-tenant', 'CI Tenant', true) ON CONFLICT (id) DO NOTHING;"
@@ -97,6 +98,7 @@ jobs:
             -d '{"text":"Email alice@example.com","purpose_defined":true,"encrypted_at_rest":true,"access_scope":"internal","data_location":"quebec"}' \
             | tee /tmp/analysis.json
           grep -q '"organization_id":"00000000-0000-0000-0000-000000000042"' /tmp/analysis.json
+          test -s /tmp/analysis.json
           test "$(python -c 'import json; print(json.load(open("/tmp/analysis.json"))["analysis_id"])')" != "None"
       - name: Verify audit integrity endpoint passes on valid persisted chain
         run: |
@@ -113,18 +115,29 @@ jobs:
           grep -q '"reason":"integrity_hash_mismatch"' /tmp/audit-integrity-invalid.json
       - name: Verify document upload pipeline with DOCX and PDF
         run: |
+          set -euo pipefail
           docker compose exec -T api python -c 'from docx import Document; d=Document(); d.add_paragraph("Contact alice@example.com"); d.save("/tmp/dataguard-test.docx")'
           docker compose exec -T api python -c 'from pypdf import PdfWriter; w=PdfWriter(); w.add_blank_page(width=612, height=792); f=open("/tmp/dataguard-test.pdf", "wb"); w.write(f); f.close()'
           docker cp "$(docker compose ps -q api):/tmp/dataguard-test.docx" /tmp/dataguard-test.docx
           docker cp "$(docker compose ps -q api):/tmp/dataguard-test.pdf" /tmp/dataguard-test.pdf
+          test -s /tmp/dataguard-test.docx
+          test -s /tmp/dataguard-test.pdf
           TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000001","org":"00000000-0000-0000-0000-000000000042","roles":["analyst"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
-          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/documents -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-test.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document' | tee /tmp/docx-analysis.json
+          DOCX_STATUS=$(curl --silent --show-error --output /tmp/docx-analysis.json --write-out '%{http_code}' -X POST http://127.0.0.1:8000/api/v1/documents -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-test.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+          test "${DOCX_STATUS}" = "200"
+          test -s /tmp/docx-analysis.json
+          grep -q '"document_type":"docx"' /tmp/docx-analysis.json
+          grep -q '"EMAIL"' /tmp/docx-analysis.json
           DOCX_ID=$(python -c 'import json; print(json.load(open("/tmp/docx-analysis.json"))["analysis_id"])')
+          test -n "${DOCX_ID}" && test "${DOCX_ID}" != "None"
           curl --fail --silent -H "Authorization: Bearer ${TOKEN}" http://127.0.0.1:8000/api/v1/analyses/${DOCX_ID} | tee /tmp/docx-persisted.json
           grep -q '"document_type":"docx"' /tmp/docx-persisted.json
-          grep -q '"EMAIL"' /tmp/docx-analysis.json
-          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/documents -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-test.pdf;type=application/pdf' | tee /tmp/pdf-analysis.json
+          PDF_STATUS=$(curl --silent --show-error --output /tmp/pdf-analysis.json --write-out '%{http_code}' -X POST http://127.0.0.1:8000/api/v1/documents -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/dataguard-test.pdf;type=application/pdf')
+          test "${PDF_STATUS}" = "200"
+          test -s /tmp/pdf-analysis.json
+          grep -q '"document_type":"pdf"' /tmp/pdf-analysis.json
           PDF_ID=$(python -c 'import json; print(json.load(open("/tmp/pdf-analysis.json"))["analysis_id"])')
+          test -n "${PDF_ID}" && test "${PDF_ID}" != "None"
           curl --fail --silent -H "Authorization: Bearer ${TOKEN}" http://127.0.0.1:8000/api/v1/analyses/${PDF_ID} | tee /tmp/pdf-persisted.json
           grep -q '"document_type":"pdf"' /tmp/pdf-persisted.json
       - name: Verify malicious archive upload is rejected
