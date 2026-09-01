@@ -3,9 +3,11 @@ from fastapi.responses import JSONResponse
 
 from dataguard.api.app import app
 from dataguard.api.audit_routes import router as audit_router
+from dataguard.api.auth_routes import router as auth_router
 from dataguard.processing.validation import UnsafeDocumentError
 
 app.include_router(audit_router)
+app.include_router(auth_router)
 
 
 async def _unsafe_document_handler(request: Request, exc: UnsafeDocumentError) -> JSONResponse:
