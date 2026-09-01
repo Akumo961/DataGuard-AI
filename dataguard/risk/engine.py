@@ -23,8 +23,8 @@ class RiskEngine:
 
     _sensitivity = {
         "PERSON": 25, "EMAIL": 25, "PHONE": 30, "ADDRESS": 30,
-        "DATE_OF_BIRTH": 40, "GOVERNMENT_ID": 60, "PASSPORT": 65,
-        "DRIVER_LICENSE": 60, "HEALTH_INFORMATION": 80,
+        "DATE_OF_BIRTH": 40, "GOVERNMENT_ID": 60, "HEALTH_INSURANCE_ID": 85,
+        "PASSPORT": 65, "DRIVER_LICENSE": 60, "HEALTH_INFORMATION": 80,
         "FINANCIAL_INFORMATION": 65, "BANK_ACCOUNT": 75, "CREDIT_CARD": 80,
         "IP_ADDRESS": 15, "LOCATION": 35, "ORGANIZATION": 10,
         "EMPLOYEE_ID": 25, "CUSTOMER_ID": 30, "TAX_ID": 65,
@@ -83,6 +83,6 @@ class RiskEngine:
             recommendations.append("Document and validate the processing purpose.")
         if ctx.retention_days is None or ctx.retention_days > 365:
             recommendations.append("Review retention and apply the minimum period justified by the documented purpose.")
-        if any(d.pii_type.value in {"HEALTH_INFORMATION", "BIOMETRIC_DATA", "SOCIAL_INSURANCE_NUMBER", "CREDIT_CARD"} for d in detections):
+        if any(d.pii_type.value in {"HEALTH_INFORMATION", "HEALTH_INSURANCE_ID", "BIOMETRIC_DATA", "SOCIAL_INSURANCE_NUMBER", "CREDIT_CARD"} for d in detections):
             recommendations.append("Apply enhanced safeguards and specialist review for highly sensitive identifiers/information.")
         return recommendations
