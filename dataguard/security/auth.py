@@ -52,7 +52,7 @@ def decode_access_token(token: str) -> AuthenticatedPrincipal:
             raise RuntimeError("OIDC JWKS endpoint is not configured")
         key = PyJWKClient(settings.oidc_jwks_url).get_signing_key_from_jwt(token).key
 
-    options = {"require": ["sub", "org", "roles", "iat", "exp"]}
+    options = {"require": ["sub", "roles", "iat", "exp"]}
     decode_kwargs: dict[str, Any] = {"algorithms": [settings.jwt_algorithm], "options": options}
     if settings.jwt_issuer:
         decode_kwargs["issuer"] = settings.jwt_issuer
@@ -60,7 +60,9 @@ def decode_access_token(token: str) -> AuthenticatedPrincipal:
         decode_kwargs["audience"] = settings.jwt_audience
     payload = jwt.decode(token, key, **decode_kwargs)
     subject = payload.get("sub")
-    organization = payload.get("org")
+    # `org_id` is accepted for backwards compatibility with previously issued
+    # development/test tokens; newly issued tokens always use `org`.
+    organization = payload.get("org") or payload.get("org_id")
     raw_roles = payload.get("roles")
     if not isinstance(subject, str) or not isinstance(organization, str) or not isinstance(raw_roles, list):
         raise InvalidTokenError("Invalid token claims")
