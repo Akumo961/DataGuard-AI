@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://dataguard:dataguard@localhost:5432/dataguard"
     redis_url: str = "redis://localhost:6379/0"
     allowed_origins: list[str] = ["http://localhost:3000"]
-    allowed_hosts: list[str] = ["localhost", "127.0.0.1", "[::1]"]
+    allowed_hosts: list[str] = ["localhost", "127.0.0.1", "[::1]", "testserver"]
     max_upload_bytes: int = 50 * 1024 * 1024
     raw_document_retention_days: int = 7
     audit_retention_days: int = 2555
