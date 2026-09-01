@@ -73,9 +73,9 @@ jobs:
           done
           docker compose logs
           exit 1
+      - name: Seed isolated CI tenant
+        run: docker compose exec -T postgres psql -U dataguard -d dataguard -c "INSERT INTO organizations (id, slug, name, active) VALUES ('00000000-0000-0000-0000-000000000042', 'ci-tenant', 'CI Tenant', true) ON CONFLICT (id) DO NOTHING;"
       - name: Exercise authenticated tenant workflow
-        env:
-          DATAGUARD_JWT_SECRET: ci-jwt-secret-with-more-than-32-characters
         run: |
           TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000001","org":"00000000-0000-0000-0000-000000000042","roles":["analyst"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
           curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/analyze \
@@ -84,6 +84,11 @@ jobs:
             | tee /tmp/analysis.json
           grep -q '"organization_id":"00000000-0000-0000-0000-000000000042"' /tmp/analysis.json
           test "$(python -c 'import json; print(json.load(open("/tmp/analysis.json"))["analysis_id"])')" != "None"
+      - name: Verify tenant isolation
+        run: |
+          TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000002","org":"00000000-0000-0000-0000-000000000043","roles":["analyst"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
+          ID=$(python -c 'import json; print(json.load(open("/tmp/analysis.json"))["analysis_id"])')
+          test "$(curl --silent -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${TOKEN}" http://127.0.0.1:8000/api/v1/analyses/${ID})" = "404"
       - name: Collect service logs on failure
         if: failure()
         run: docker compose logs
