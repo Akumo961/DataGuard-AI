@@ -1,0 +1,33 @@
+name: DataGuard SBOM
+
+on:
+  push:
+    branches: [main, "production/**"]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sbom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install SBOM generator
+        run: python -m pip install --upgrade pip cyclonedx-bom
+      - name: Generate CycloneDX SBOM
+        run: cyclonedx-py environment --output-format json --output-file dataguard-sbom.json
+      - name: Validate SBOM
+        run: python -c 'import json; d=json.load(open("dataguard-sbom.json")); assert d.get("bomFormat") == "CycloneDX"; assert d.get("components") is not None'
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dataguard-sbom
+          path: dataguard-sbom.json
+          if-no-files-found: error
