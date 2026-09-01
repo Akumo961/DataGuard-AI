@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 from collections import defaultdict
 
 from dataguard.detection.base import DetectionEngine
+from dataguard.detection.ner import NERDetector
 from dataguard.domain.models import Detection
 
 
@@ -14,6 +16,9 @@ class EnsembleDetector(DetectionEngine):
             raise ValueError("at least one detector is required")
         if not 0 <= threshold <= 1:
             raise ValueError("threshold must be between 0 and 1")
+        configured_model = os.getenv("DATAGUARD_NER_MODEL", "").strip()
+        if configured_model:
+            detectors = [*detectors, NERDetector.from_spacy(configured_model)]
         self.detectors = detectors
         self.threshold = threshold
 
