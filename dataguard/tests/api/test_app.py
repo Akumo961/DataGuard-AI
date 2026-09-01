@@ -7,7 +7,8 @@ from dataguard.api.app import create_app
 
 
 def token(org_id: str = "org-1") -> str:
-    return jwt.encode({"sub": "user-1", "org_id": org_id, "roles": ["analyst"], "exp": datetime.now(timezone.utc) + timedelta(minutes=5)}, "test-secret", algorithm="HS256")
+    now = datetime.now(timezone.utc)
+    return jwt.encode({"sub": "user-1", "org_id": org_id, "roles": ["analyst"], "iat": now, "exp": now + timedelta(minutes=5)}, "test-secret", algorithm="HS256")
 
 
 def test_health_does_not_require_auth(monkeypatch) -> None:
