@@ -28,10 +28,7 @@ jobs:
           done
           exit 1
       - name: Apply migrations
-        run: |
-          docker compose run --rm --no-deps \
-            -e DATAGUARD_DATABASE_URL=postgresql+psycopg://dataguard:${POSTGRES_PASSWORD}@host.docker.internal:5432/dataguard \
-            api alembic upgrade head
+        run: docker compose run --rm api alembic upgrade head
       - name: Seed synthetic recovery marker
         run: docker compose exec -T postgres psql -U dataguard -d dataguard -c "INSERT INTO organizations (id, slug, name, active) VALUES ('00000000-0000-0000-0000-000000000099', 'dr-drill', 'DR Synthetic Marker', true) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name;"
       - name: Create logical backup
