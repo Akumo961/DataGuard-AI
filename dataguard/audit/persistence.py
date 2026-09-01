@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from sqlalchemy import Connection, event, select, text
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Mapper
@@ -20,6 +22,9 @@ def _canonicalize_persisted_audit_hash(
 ) -> None:
     """Write audit hashes using the same canonical representation exposed by verification."""
     del mapper
+    if target.id is None:
+        target.id = uuid4()
+
     organization_id = str(target.organization_id)
     connection.execute(
         text("SELECT pg_advisory_xact_lock(hashtext(:org))"),
