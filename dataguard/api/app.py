@@ -46,9 +46,8 @@ from dataguard.security.web import SecurityHeadersMiddleware
 
 
 def _redact(value: str | None) -> str:
-    if not value:
-        return "[REDACTED]"
-    return "[REDACTED]" if len(value) <= 4 else "[REDACTED]" + value[-2:]
+    """Return a fixed placeholder and never disclose source characters."""
+    return "[REDACTED]"
 
 
 async def _tenant_session(session: AsyncSession, organization_id: str) -> None:
