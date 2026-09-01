@@ -28,8 +28,8 @@ services:
     build: .
     environment:
       DATAGUARD_ENVIRONMENT: ${DATAGUARD_ENVIRONMENT:-development}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://dataguard:${POSTGRES_PASSWORD}@postgres:5432/dataguard}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      DATAGUARD_DATABASE_URL: ${DATAGUARD_DATABASE_URL:-postgresql+psycopg://dataguard:${POSTGRES_PASSWORD}@postgres:5432/dataguard}
+      DATAGUARD_REDIS_URL: ${DATAGUARD_REDIS_URL:-redis://redis:6379/0}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
       DATAGUARD_JWT_SECRET: ${DATAGUARD_JWT_SECRET:?set DATAGUARD_JWT_SECRET}
       DATAGUARD_OCR_ENABLED: ${DATAGUARD_OCR_ENABLED:-true}
