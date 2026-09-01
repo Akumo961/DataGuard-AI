@@ -20,10 +20,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     allowed_origins: list[str] = ["http://localhost:3000"]
     allowed_hosts: list[str] = ["localhost", "127.0.0.1", "[::1]", "testserver"]
-    max_upload_bytes: int = 50 * 1024 * 1024
-    raw_document_retention_days: int = 7
-    audit_retention_days: int = 2555
-    request_timeout_seconds: int = 60
+    max_upload_bytes: int = Field(default=50 * 1024 * 1024, ge=1_048_576, le=100 * 1024 * 1024)
+    raw_document_retention_days: int = Field(default=7, ge=1, le=3650)
+    audit_retention_days: int = Field(default=2555, ge=30, le=36500)
+    request_timeout_seconds: int = Field(default=60, ge=1, le=300)
 
     jwt_secret: SecretStr | None = None
     jwt_algorithm: str = Field(default="HS256", pattern=r"^(HS256|RS256|ES256)$")
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     oidc_jwks_url: str | None = None
     security_headers_enabled: bool = True
     rate_limit_per_minute: int = Field(default=120, ge=1, le=10_000)
-    max_request_body_bytes: int = Field(default=60 * 1024 * 1024, ge=1_024)
+    max_request_body_bytes: int = Field(default=60 * 1024 * 1024, ge=1_024, le=110 * 1024 * 1024)
     upload_allowed_mime_types: list[str] = [
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -90,6 +90,16 @@ class Settings(BaseSettings):
             )
         if any(origin.startswith("http://") for origin in self.allowed_origins):
             raise ValueError("Production CORS origins must use HTTPS")
+        if any(host in {"localhost", "127.0.0.1", "[::1]", "testserver"} for host in self.allowed_hosts):
+            raise ValueError("Production trusted hosts must not contain local/test hosts")
+        if any(host in self.database_url.lower() for host in ("localhost", "127.0.0.1")):
+            raise ValueError("Production database must not use a local loopback host")
+        if any(host in self.redis_url.lower() for host in ("localhost", "127.0.0.1")):
+            raise ValueError("Production Redis must not use a local loopback host")
+        if self.max_request_body_bytes < self.max_upload_bytes:
+            raise ValueError("Request body limit must be at least the upload limit")
+        if not self.security_headers_enabled:
+            raise ValueError("Security headers cannot be disabled in production")
 
 
 @lru_cache
