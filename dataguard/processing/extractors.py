@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 from typing import Protocol
 
 from dataguard.processing.models import DocumentType, ExtractedDocument
@@ -73,4 +74,7 @@ class ImageExtractor:
         from PIL import Image
         image = Image.open(io.BytesIO(content))
         image.verify()
-        return ExtractedDocument(filename, DocumentType.IMAGE, "", warnings=("OCR is not enabled by default; no text was inferred from this image.",))
+        if os.getenv("DATAGUARD_OCR_ENABLED", "false").lower() != "true":
+            return ExtractedDocument(filename, DocumentType.IMAGE, "", warnings=("OCR is disabled; set DATAGUARD_OCR_ENABLED=true to extract image text.",))
+        from dataguard.processing.ocr import OCRExtractor
+        return OCRExtractor().extract(filename, content)
