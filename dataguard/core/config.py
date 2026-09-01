@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -94,3 +96,8 @@ class Settings(BaseSettings):
             if not self.security_headers_enabled:
                 raise ValueError("Production security headers cannot be disabled")
         return self
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
