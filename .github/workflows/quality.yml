@@ -61,13 +61,13 @@ jobs:
   docker-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      POSTGRES_PASSWORD: dataguard-ci-password
+      SECRET_KEY: ci-secret-key-with-more-than-32-characters
+      DATAGUARD_JWT_SECRET: ci-jwt-secret-with-more-than-32-characters
     steps:
       - uses: actions/checkout@v4
       - name: Start PostgreSQL, Redis and API
-        env:
-          POSTGRES_PASSWORD: dataguard-ci-password
-          SECRET_KEY: ci-secret-key-with-more-than-32-characters
-          DATAGUARD_JWT_SECRET: ci-jwt-secret-with-more-than-32-characters
         run: docker compose up -d --build
       - name: Wait for readiness
         run: |
