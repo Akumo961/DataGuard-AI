@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Uuid, event, text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -138,6 +138,14 @@ class AuditEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
 @event.listens_for(AuditEvent, "before_insert")
 def _hash_audit_event(mapper, connection, target: AuditEvent) -> None:
     """Serialize every audit insert into an organization-scoped hash chain."""
+    del mapper
+    # SQLAlchemy may not have invoked the mapped-column Python default yet when
+    # mapper before_insert fires. The event id is part of the signed payload, so
+    # allocate it explicitly before hashing to guarantee the persisted UUID and
+    # the hashed UUID are identical.
+    if target.id is None:
+        target.id = uuid4()
+
     org = str(target.organization_id)
     if connection.dialect.name == "postgresql":
         connection.execute(text("SELECT pg_advisory_xact_lock(hashtext(:org))"), {"org": org})
