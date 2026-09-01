@@ -9,9 +9,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -20,16 +20,19 @@ services:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   api:
     build: .
     environment:
+      DATAGUARD_ENVIRONMENT: ${DATAGUARD_ENVIRONMENT:-development}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://dataguard:${POSTGRES_PASSWORD}@postgres:5432/dataguard}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+      DATAGUARD_JWT_SECRET: ${DATAGUARD_JWT_SECRET:?set DATAGUARD_JWT_SECRET}
+      DATAGUARD_OCR_ENABLED: ${DATAGUARD_OCR_ENABLED:-true}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8000}
     ports:
       - "${DATAGUARD_PORT:-8000}:8000"
