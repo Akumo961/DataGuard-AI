@@ -15,6 +15,10 @@ class PatternRule:
     group: int = 0
 
 
+_H = r"[ \t]"
+_NAME = r"[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ'’-]+"
+
+
 class RegexPIIDetector(DetectionEngine):
     name = "regex"
 
@@ -27,25 +31,9 @@ class RegexPIIDetector(DetectionEngine):
         PatternRule(PIIType.HEALTH_INSURANCE_ID, re.compile(r"(?<![A-Z0-9])[A-Z]{4}[ -]?\d{8}(?![A-Z0-9])", re.I), 0.88),
         PatternRule(PIIType.PASSPORT, re.compile(r"\b[A-Z]{1,2}\d{6,8}\b"), 0.55),
         PatternRule(PIIType.DATE_OF_BIRTH, re.compile(r"\b(?:19|20)\d{2}[-/.](?:0[1-9]|1[0-2])[-/.](?:0[1-9]|[12]\d|3[01])\b"), 0.82),
-        # Contextual rules intentionally require an explicit label to reduce false positives.
-        PatternRule(
-            PIIType.PERSON,
-            re.compile(r"(?i)(?:nom(?:\s+complet)?|prénom|name)\s*[:\-]\s*([A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ'’-]+(?:\s+[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ'’-]+){1,3})"),
-            0.93,
-            1,
-        ),
-        PatternRule(
-            PIIType.ADDRESS,
-            re.compile(r"(?i)(?:adresse|address|domicile)\s*[:\-]\s*(\d{1,6}\s+[A-Za-zÀ-ÖØ-öø-ÿ0-9'’.-]+(?:\s+[A-Za-zÀ-ÖØ-öø-ÿ0-9'’.-]+){1,8}(?:,\s*[A-Za-zÀ-ÖØ-öø-ÿ .'-]+)?)"),
-            0.91,
-            1,
-        ),
-        PatternRule(
-            PIIType.HEALTH_INFORMATION,
-            re.compile(r"(?i)(?:diagnostic|diagnosis|condition médicale|medical condition|dossier médical|medical record)\s*[:\-]\s*([^\n]{2,120})"),
-            0.90,
-            1,
-        ),
+        PatternRule(PIIType.PERSON, re.compile(rf"(?i)(?:nom(?:{_H}+complet)?|prénom|name){_H}*[:\-]{_H}*({_NAME}(?:{_H}+{_NAME}){{1,3}})"), 0.93, 1),
+        PatternRule(PIIType.ADDRESS, re.compile(rf"(?i)(?:adresse|address|domicile){_H}*[:\-]{_H}*(\d{{1,6}}{_H}+[^\n,]+(?:,{_H}*[A-Za-zÀ-ÖØ-öø-ÿ .'-]+)?)"), 0.91, 1),
+        PatternRule(PIIType.HEALTH_INFORMATION, re.compile(r"(?i)(?:diagnostic|diagnosis|condition médicale|medical condition|dossier médical|medical record)\s*[:\-]\s*([^\n]{2,120})"), 0.90, 1),
     )
 
     def detect(self, text: str) -> list[Detection]:
