@@ -1,7 +1,7 @@
 from dataguard.database.base import Base
 from dataguard.database.models import (
-    APIKey,
     Analysis,
+    APIKey,
     AuditEvent,
     RefreshToken,
     SecurityEvent,
