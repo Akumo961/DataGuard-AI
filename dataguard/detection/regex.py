@@ -128,8 +128,10 @@ class RegexPIIDetector(DetectionEngine):
         PatternRule(
             PIIType.ADDRESS,
             re.compile(
-                rf"\b(\d{{1,6}}{_H}+[A-Za-zÀ-ÖØ-öø-ÿ0-9'’.-]+{_H}+{_STREET_TYPES}"
-                rf"(?:{_H}+[A-Za-zÀ-ÖØ-öø-ÿ0-9'’.-]+){{0,4}}"
+                rf"\b(\d{{1,6}}{_H}+(?:{_STREET_TYPES}{_H}+[A-Za-zÀ-ÖØ-öø-ÿ0-9'’.-]+"
+                rf"(?:{_H}+[A-Za-zÀ-ÖØ-öø-ÿ0-9'’.-]+){{0,3}}|"
+                rf"[A-Za-zÀ-ÖØ-öø-ÿ0-9'’.-]+{_H}+{_STREET_TYPES}"
+                rf"(?:{_H}+[A-Za-zÀ-ÖØ-öø-ÿ0-9'’.-]+){{0,4}})"
                 rf"(?:,{_H}*{_CITY})?)\b",
                 re.I,
             ),
