@@ -47,6 +47,27 @@ def test_analyze_requires_auth(monkeypatch) -> None:
         get_settings.cache_clear()
 
 
+def test_analyze_redacts_entire_pii_value(monkeypatch) -> None:
+    monkeypatch.setenv("DATAGUARD_ENVIRONMENT", "test")
+    monkeypatch.setenv("DATAGUARD_JWT_SECRET", TEST_SECRET)
+    get_settings.cache_clear()
+    try:
+        client = TestClient(create_app())
+        response = client.post(
+            "/api/v1/analyze",
+            headers={"Authorization": f"Bearer {token('org-42')}"},
+            json={"text": "Email alice@example.com"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["organization_id"] == "org-42"
+        assert body["detections"][0]["redacted_value"] == "[REDACTED]"
+        assert "alice@example.com" not in response.text
+        assert "example.com" not in response.text
+    finally:
+        get_settings.cache_clear()
+
+
 def test_analyze_is_tenant_scoped_and_redacts_value(monkeypatch) -> None:
     monkeypatch.setenv("DATAGUARD_ENVIRONMENT", "test")
     monkeypatch.setenv("DATAGUARD_JWT_SECRET", TEST_SECRET)
