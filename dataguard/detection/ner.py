@@ -7,17 +7,32 @@ from dataguard.domain.models import Detection, PIIType
 
 
 class NERDetector(DetectionEngine):
-    """Adapter boundary for a separately evaluated NER model.
-
-    No pretrained model is bundled or represented as production-ready. An adapter
-    must explicitly map model labels to the configured DataGuard taxonomy.
-    """
+    """Adapter boundary for a separately evaluated multilingual NER model."""
 
     name = "ner"
 
     def __init__(self, model: Any, label_map: dict[str, PIIType]) -> None:
         self.model = model
         self.label_map = label_map
+
+    @classmethod
+    def from_spacy(cls, model_name: str = "xx_ent_wiki_sm") -> NERDetector:
+        """Load the pinned lightweight multilingual spaCy NER model lazily."""
+        try:
+            import spacy
+        except ImportError as exc:
+            raise RuntimeError("spaCy NER support is not installed") from exc
+        model = spacy.load(model_name)
+        return cls(
+            model,
+            {
+                "PER": PIIType.PERSON,
+                "PERSON": PIIType.PERSON,
+                "ORG": PIIType.ORGANIZATION,
+                "GPE": PIIType.LOCATION,
+                "LOC": PIIType.LOCATION,
+            },
+        )
 
     def detect(self, text: str) -> list[Detection]:
         entities = self.model(text)
