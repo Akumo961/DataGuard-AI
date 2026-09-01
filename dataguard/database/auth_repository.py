@@ -7,8 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dataguard.database.models import Organization, User, UserRole
-from dataguard.security.policy import Role
 from dataguard.security.passwords import hash_password, verify_password
+from dataguard.security.policy import Role
 
 MAX_FAILED_LOGINS = 5
 LOCK_MINUTES = 15
