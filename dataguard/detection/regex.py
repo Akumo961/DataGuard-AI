@@ -17,6 +17,11 @@ class PatternRule:
 
 _H = r"[ \t]"
 _NAME = r"[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ'’-]+"
+_STREET_TYPES = (
+    r"(?:street|st\.?|avenue|ave\.?|road|rd\.?|boulevard|blvd\.?|drive|dr\.?|lane|ln\.?|"
+    r"route|chemin|rue|avenue|av\.?|boulevard|boul\.?|chemin|montée|place|pl\.?|rang)"
+)
+_CITY = r"[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ .'-]{1,60}"
 
 
 class RegexPIIDetector(DetectionEngine):
@@ -81,11 +86,55 @@ class RegexPIIDetector(DetectionEngine):
         ),
     )
 
+    # Contextual rules deliberately do not require a field label. They target
+    # high-signal civic addresses and person-name forms while avoiding a broad
+    # "any two capitalized words" heuristic that creates excessive false positives.
+    _contextual_rules = (
+        PatternRule(
+            PIIType.PERSON,
+            re.compile(
+                rf"\b(?:M(?:me|me\.)|Mme|M(?:r|r\.)|Mr|Mrs|Ms|Dr|Docteure?|Monsieur|Madame)"
+                rf"{_H}+({_NAME}(?:{_H}+{_NAME}){{1,2}})\b"
+            ),
+            0.86,
+            1,
+        ),
+        PatternRule(
+            PIIType.PERSON,
+            re.compile(
+                rf"(?i)\b(?:first name|last name|given name|family name|nom de famille|prénom)"
+                rf"{_H}+(?:is|est|:)??{_H}*({_NAME}(?:{_H}+{_NAME}){{0,2}})\b"
+            ),
+            0.88,
+            1,
+        ),
+        PatternRule(
+            PIIType.ADDRESS,
+            re.compile(
+                rf"\b(\d{{1,6}}{_H}+[A-Za-zÀ-ÖØ-öø-ÿ0-9'’.-]+{_H}+{_STREET_TYPES}"
+                rf"(?:{_H}+[A-Za-zÀ-ÖØ-öø-ÿ0-9'’.-]+){{0,4}}(?:,{_H}*{_CITY})?)\b",
+                re.I,
+            ),
+            0.87,
+            1,
+        ),
+        PatternRule(
+            PIIType.ADDRESS,
+            re.compile(
+                rf"\b(\d{{1,6}}{_H}+[^\n,]{{3,80}},{_H}*[A-Za-zÀ-ÖØ-öø-ÿ .'-]{{2,60}}"
+                rf"{_H}+[A-Z]{{2}}{_H}+\d[A-Z]\d[ -]?\d[A-Z]\d)\b",
+                re.I,
+            ),
+            0.94,
+            1,
+        ),
+    )
+
     def detect(self, text: str) -> list[Detection]:
         if not text:
             return []
         detections: list[Detection] = []
-        for rule in self._rules:
+        for rule in (*self._rules, *self._contextual_rules):
             for match in rule.pattern.finditer(text):
                 value = match.group(rule.group)
                 start, end = match.span(rule.group)
