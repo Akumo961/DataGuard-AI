@@ -30,5 +30,15 @@ class NERDetector(DetectionEngine):
             start = int(entity.start_char if hasattr(entity, "start_char") else entity.start)
             end = int(entity.end_char if hasattr(entity, "end_char") else entity.end)
             score = float(getattr(entity, "score", 0.5))
-            result.append(Detection(pii_type, start, end, max(0.0, min(score, 1.0)), self.name, text[start:end], {"model_label": str(label)}))
+            result.append(
+                Detection(
+                    pii_type,
+                    start,
+                    end,
+                    max(0.0, min(score, 1.0)),
+                    self.name,
+                    text[start:end],
+                    {"model_label": str(label)},
+                )
+            )
         return result

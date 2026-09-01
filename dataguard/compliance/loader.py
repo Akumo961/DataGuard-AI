@@ -24,13 +24,23 @@ class FrameworkLoader:
         for item in payload["rules"]:
             if not isinstance(item, dict):
                 raise ValueError("invalid rule entry")
-            rules.append(ComplianceRule(
-                rule_id=str(item["rule_id"]), title=str(item["title"]), description=str(item["description"]),
-                category=str(item["category"]), severity=Severity(str(item["severity"])),
-                evidence_required=tuple(str(x) for x in item.get("evidence_required", [])),
-                assessment_questions=tuple(str(x) for x in item.get("assessment_questions", [])),
-                remediation_recommendations=tuple(str(x) for x in item.get("remediation_recommendations", [])),
-                version=framework_version, source_reference=str(item["source_reference"]),
-                applicability=Applicability(str(item["applicability"])),
-            ))
+            rules.append(
+                ComplianceRule(
+                    rule_id=str(item["rule_id"]),
+                    title=str(item["title"]),
+                    description=str(item["description"]),
+                    category=str(item["category"]),
+                    severity=Severity(str(item["severity"])),
+                    evidence_required=tuple(str(x) for x in item.get("evidence_required", [])),
+                    assessment_questions=tuple(
+                        str(x) for x in item.get("assessment_questions", [])
+                    ),
+                    remediation_recommendations=tuple(
+                        str(x) for x in item.get("remediation_recommendations", [])
+                    ),
+                    version=framework_version,
+                    source_reference=str(item["source_reference"]),
+                    applicability=Applicability(str(item["applicability"])),
+                )
+            )
         return rules

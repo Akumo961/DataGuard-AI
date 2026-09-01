@@ -19,7 +19,9 @@ def build_engine():
 
 
 engine = build_engine()
-SessionFactory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False, autoflush=False)
+SessionFactory = async_sessionmaker(
+    engine, class_=AsyncSession, expire_on_commit=False, autoflush=False
+)
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

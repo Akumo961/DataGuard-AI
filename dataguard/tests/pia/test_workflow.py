@@ -7,7 +7,13 @@ def test_full_pia_lifecycle() -> None:
     workflow = PIAWorkflow()
     pia = PIA("pia-1", "org-1", "Citizen portal")
     history = []
-    for target in (PIAStatus.IN_REVIEW, PIAStatus.REQUIRES_REMEDIATION, PIAStatus.IN_REVIEW, PIAStatus.APPROVED, PIAStatus.ARCHIVED):
+    for target in (
+        PIAStatus.IN_REVIEW,
+        PIAStatus.REQUIRES_REMEDIATION,
+        PIAStatus.IN_REVIEW,
+        PIAStatus.APPROVED,
+        PIAStatus.ARCHIVED,
+    ):
         pia, entry = workflow.transition(pia, target, "user-1", "reviewed")
         history.append(entry)
     assert pia.status is PIAStatus.ARCHIVED

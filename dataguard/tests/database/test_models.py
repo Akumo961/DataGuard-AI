@@ -1,9 +1,27 @@
 from dataguard.database.base import Base
-from dataguard.database.models import APIKey, Analysis, AuditEvent, Organization, RefreshToken, SecurityEvent, User, UserRole
+from dataguard.database.models import (
+    APIKey,
+    Analysis,
+    AuditEvent,
+    Organization,
+    RefreshToken,
+    SecurityEvent,
+    User,
+    UserRole,
+)
 
 
 def test_all_phase4_tables_are_registered() -> None:
-    expected = {"organizations", "users", "user_roles", "api_keys", "analyses", "security_events", "audit_events", "refresh_tokens"}
+    expected = {
+        "organizations",
+        "users",
+        "user_roles",
+        "api_keys",
+        "analyses",
+        "security_events",
+        "audit_events",
+        "refresh_tokens",
+    }
     assert expected.issubset(Base.metadata.tables)
 
 

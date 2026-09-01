@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from dataguard.processing.extractors import CSVExtractor, DOCXExtractor, ImageExtractor, JSONExtractor, PDFExtractor, TextExtractor, XLSXExtractor
+from dataguard.processing.extractors import (
+    CSVExtractor,
+    DOCXExtractor,
+    ImageExtractor,
+    JSONExtractor,
+    PDFExtractor,
+    TextExtractor,
+    XLSXExtractor,
+)
 from dataguard.processing.models import DocumentInput, ExtractedDocument
 from dataguard.processing.validation import DocumentValidator
 
@@ -9,10 +17,17 @@ class DocumentProcessingPipeline:
     def __init__(self, validator: DocumentValidator | None = None) -> None:
         self.validator = validator or DocumentValidator()
         self._extractors = {
-            ".pdf": PDFExtractor(), ".docx": DOCXExtractor(), ".txt": TextExtractor(),
-            ".csv": CSVExtractor(), ".xlsx": XLSXExtractor(), ".json": JSONExtractor(),
-            ".png": ImageExtractor(), ".jpg": ImageExtractor(), ".jpeg": ImageExtractor(),
-            ".tif": ImageExtractor(), ".tiff": ImageExtractor(),
+            ".pdf": PDFExtractor(),
+            ".docx": DOCXExtractor(),
+            ".txt": TextExtractor(),
+            ".csv": CSVExtractor(),
+            ".xlsx": XLSXExtractor(),
+            ".json": JSONExtractor(),
+            ".png": ImageExtractor(),
+            ".jpg": ImageExtractor(),
+            ".jpeg": ImageExtractor(),
+            ".tif": ImageExtractor(),
+            ".tiff": ImageExtractor(),
         }
 
     def process(self, document: DocumentInput) -> ExtractedDocument:

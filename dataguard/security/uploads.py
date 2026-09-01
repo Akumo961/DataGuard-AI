@@ -37,16 +37,30 @@ def validate_upload_metadata(*, filename: str, content_type: str, size_bytes: in
 def validate_outbound_url(url: str) -> None:
     """Reject non-HTTP(S), local, loopback and private destinations before egress."""
     parsed = urlparse(url)
-    if parsed.scheme not in {"https", "http"} or not parsed.hostname or parsed.username or parsed.password:
+    if (
+        parsed.scheme not in {"https", "http"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+    ):
         raise UploadRejected("Outbound URL is not allowed")
     host = parsed.hostname.rstrip(".").lower()
     if host in {"localhost", "metadata.google.internal"}:
         raise UploadRejected("Local/metadata destinations are not allowed")
     try:
-        addresses = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+        addresses = socket.getaddrinfo(
+            host, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM
+        )
     except OSError as exc:
         raise UploadRejected("Unable to resolve outbound host") from exc
     for address in addresses:
         ip = ipaddress.ip_address(address[4][0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
             raise UploadRejected("Private or local outbound destination is not allowed")

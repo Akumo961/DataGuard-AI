@@ -29,7 +29,10 @@ CASES = (
 
 def evaluate(cases=CASES) -> dict[str, object]:
     detector = RegexPIIDetector()
-    labels = sorted({label for case in cases for label in case.expected} | {d.pii_type.value for case in cases for d in detector.detect(case.text)})
+    labels = sorted(
+        {label for case in cases for label in case.expected}
+        | {d.pii_type.value for case in cases for d in detector.detect(case.text)}
+    )
     per_class: dict[str, dict[str, float]] = {}
     for label in labels:
         tp = fp = fn = 0
@@ -41,11 +44,19 @@ def evaluate(cases=CASES) -> dict[str, object]:
         precision = tp / (tp + fp) if tp + fp else 1.0
         recall = tp / (tp + fn) if tp + fn else 1.0
         f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-        per_class[label] = {"precision": precision, "recall": recall, "f1": f1, "tp": tp, "fp": fp, "fn": fn}
+        per_class[label] = {
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "tp": tp,
+            "fp": fp,
+            "fn": fn,
+        }
     macro_f1 = sum(item["f1"] for item in per_class.values()) / len(per_class) if per_class else 0.0
     return {"cases": len(cases), "macro_f1": macro_f1, "per_class": per_class}
 
 
 if __name__ == "__main__":
     import json
+
     print(json.dumps(evaluate(), indent=2, sort_keys=True))

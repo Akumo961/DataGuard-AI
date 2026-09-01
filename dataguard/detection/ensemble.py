@@ -32,5 +32,15 @@ class EnsembleDetector(DetectionEngine):
             confidence = 1.0 - confidence
             best = max(items, key=lambda item: item.confidence)
             if confidence >= self.threshold:
-                result.append(Detection(best.pii_type, best.start, best.end, min(confidence, 1.0), self.name, best.value, {"detectors": tuple(sorted({i.detector for i in items}))}))
+                result.append(
+                    Detection(
+                        best.pii_type,
+                        best.start,
+                        best.end,
+                        min(confidence, 1.0),
+                        self.name,
+                        best.value,
+                        {"detectors": tuple(sorted({i.detector for i in items}))},
+                    )
+                )
         return sorted(result, key=lambda item: (item.start, item.end))

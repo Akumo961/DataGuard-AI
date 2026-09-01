@@ -9,7 +9,9 @@ from dataguard.core.config import get_settings
 
 
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next: Callable[[object], Awaitable[Response]]) -> Response:
+    async def dispatch(
+        self, request, call_next: Callable[[object], Awaitable[Response]]
+    ) -> Response:
         declared = request.headers.get("content-length")
         if declared:
             try:

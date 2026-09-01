@@ -49,7 +49,16 @@ class DocumentValidator:
                 validate_ooxml_archive(document.content)
             except ValueError as exc:
                 raise UnsafeDocumentError(str(exc)) from exc
-        if document.declared_mime and suffix in {".pdf", ".docx", ".xlsx", ".png", ".jpg", ".jpeg", ".tif", ".tiff"}:
+        if document.declared_mime and suffix in {
+            ".pdf",
+            ".docx",
+            ".xlsx",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".tif",
+            ".tiff",
+        }:
             guessed = mimetypes.guess_type(name)[0]
             if guessed and document.declared_mime != guessed:
                 raise UnsafeDocumentError("declared MIME type does not match the filename")

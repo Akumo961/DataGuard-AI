@@ -24,8 +24,12 @@ class StubCompliance(ComplianceEngine):
 
 
 def test_domain_pipeline_is_composable():
-    use_case = AnalyzeText(AnalysisDependencies((StubDetector(),), None, StubRisk(), StubCompliance()))
-    result = use_case.execute(TenantContext("org-1", "user-1"), "test@example.com", {"purpose": "test"})
+    use_case = AnalyzeText(
+        AnalysisDependencies((StubDetector(),), None, StubRisk(), StubCompliance())
+    )
+    result = use_case.execute(
+        TenantContext("org-1", "user-1"), "test@example.com", {"purpose": "test"}
+    )
     assert result.analysis_id
     assert len(result.detections) == 1
     assert result.detections[0].detector == "stub"

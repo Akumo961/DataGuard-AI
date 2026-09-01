@@ -22,11 +22,19 @@ class AuthenticatedPrincipal:
         return TenantContext(self.organization_id, self.subject_id, self.roles)
 
 
-def create_access_token(*, subject_id: str, organization_id: str, roles: set[Role], expires_minutes: int = 15) -> str:
+def create_access_token(
+    *, subject_id: str, organization_id: str, roles: set[Role], expires_minutes: int = 15
+) -> str:
     settings = get_settings()
-    secret = settings.jwt_secret.get_secret_value() if settings.jwt_secret else os.getenv("DATAGUARD_JWT_SECRET")
+    secret = (
+        settings.jwt_secret.get_secret_value()
+        if settings.jwt_secret
+        else os.getenv("DATAGUARD_JWT_SECRET")
+    )
     if settings.environment == "production" or settings.jwt_algorithm != "HS256" or not secret:
-        raise RuntimeError("Local token issuance is disabled for production or missing a JWT secret")
+        raise RuntimeError(
+            "Local token issuance is disabled for production or missing a JWT secret"
+        )
     if not 1 <= expires_minutes <= 60:
         raise ValueError("Access token lifetime must be between 1 and 60 minutes")
     now = datetime.now(timezone.utc)
@@ -45,7 +53,11 @@ def decode_access_token(token: str) -> AuthenticatedPrincipal:
     if not token or len(token) > 16_384:
         raise InvalidTokenError("Invalid access token")
     if settings.jwt_algorithm == "HS256":
-        key = settings.jwt_secret.get_secret_value() if settings.jwt_secret else os.getenv("DATAGUARD_JWT_SECRET")
+        key = (
+            settings.jwt_secret.get_secret_value()
+            if settings.jwt_secret
+            else os.getenv("DATAGUARD_JWT_SECRET")
+        )
         if not key:
             raise RuntimeError("JWT validation key is not configured")
     else:
@@ -63,7 +75,11 @@ def decode_access_token(token: str) -> AuthenticatedPrincipal:
     subject = payload.get("sub")
     organization = payload.get("org") or payload.get("org_id")
     raw_roles = payload.get("roles")
-    if not isinstance(subject, str) or not isinstance(organization, str) or not isinstance(raw_roles, list):
+    if (
+        not isinstance(subject, str)
+        or not isinstance(organization, str)
+        or not isinstance(raw_roles, list)
+    ):
         raise InvalidTokenError("Invalid token claims")
     try:
         roles = frozenset(Role(value) for value in raw_roles)

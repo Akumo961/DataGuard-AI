@@ -12,7 +12,9 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "DataGuard Québec"
-    environment: str = Field(default="development", pattern=r"^(development|test|staging|production)$")
+    environment: str = Field(
+        default="development", pattern=r"^(development|test|staging|production)$"
+    )
     api_prefix: str = "/api/v1"
     database_url: str = "postgresql+psycopg://dataguard:dataguard@localhost:5432/dataguard"
     redis_url: str = "redis://localhost:6379/0"
@@ -33,10 +35,15 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = Field(default=120, ge=1, le=10_000)
     max_request_body_bytes: int = Field(default=60 * 1024 * 1024, ge=1_024)
     upload_allowed_mime_types: list[str] = [
-        "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "text/plain", "text/csv", "application/json",
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text/plain",
+        "text/csv",
+        "application/json",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "image/png", "image/jpeg", "image/tiff",
+        "image/png",
+        "image/jpeg",
+        "image/tiff",
     ]
 
     @field_validator("allowed_origins")
@@ -72,8 +79,15 @@ class Settings(BaseSettings):
             return
         if self.jwt_algorithm not in {"RS256", "ES256"}:
             raise ValueError("Production JWT validation must use RS256 or ES256 through OIDC/JWKS")
-        if not self.oidc_issuer_url or not self.oidc_jwks_url or not self.jwt_issuer or not self.jwt_audience:
-            raise ValueError("Production authentication requires OIDC issuer, JWKS URL, JWT issuer and audience")
+        if (
+            not self.oidc_issuer_url
+            or not self.oidc_jwks_url
+            or not self.jwt_issuer
+            or not self.jwt_audience
+        ):
+            raise ValueError(
+                "Production authentication requires OIDC issuer, JWKS URL, JWT issuer and audience"
+            )
         if any(origin.startswith("http://") for origin in self.allowed_origins):
             raise ValueError("Production CORS origins must use HTTPS")
 

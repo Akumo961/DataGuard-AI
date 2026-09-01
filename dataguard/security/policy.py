@@ -34,14 +34,18 @@ class AuthorizationPolicy:
     _permissions: dict[str, frozenset[Role]] = {
         "analysis:read": frozenset(Role),
         "analysis:write": frozenset({Role.ANALYST, Role.PRIVACY_OFFICER, Role.ORG_ADMIN}),
-        "pii:review": frozenset({Role.ANALYST, Role.PRIVACY_OFFICER, Role.SECURITY_ADMIN, Role.ORG_ADMIN}),
+        "pii:review": frozenset(
+            {Role.ANALYST, Role.PRIVACY_OFFICER, Role.SECURITY_ADMIN, Role.ORG_ADMIN}
+        ),
         "pia:manage": frozenset({Role.PRIVACY_OFFICER, Role.ORG_ADMIN}),
         "security:manage": frozenset({Role.SECURITY_ADMIN, Role.ORG_ADMIN}),
         "organization:manage": frozenset({Role.ORG_ADMIN}),
         "audit:read": frozenset({Role.PRIVACY_OFFICER, Role.SECURITY_ADMIN, Role.ORG_ADMIN}),
     }
 
-    def require(self, context: TenantContext, permission: str, resource_organization_id: str) -> None:
+    def require(
+        self, context: TenantContext, permission: str, resource_organization_id: str
+    ) -> None:
         if context.organization_id != resource_organization_id:
             raise PermissionError("Cross-tenant access denied")
         allowed = self._permissions.get(permission)

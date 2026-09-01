@@ -27,10 +27,27 @@ class ComplianceEngine:
         findings: list[ComplianceFinding] = []
         for rule in self.rules:
             if rule.applicability is Applicability.REVIEW:
-                status, reason = "REQUIRES_REVIEW", "Applicability requires authorized human/legal review."
+                status, reason = (
+                    "REQUIRES_REVIEW",
+                    "Applicability requires authorized human/legal review.",
+                )
             else:
                 missing = [item for item in rule.evidence_required if not evidence.get(item, False)]
                 status = "PASS" if not missing else "REQUIRES_REMEDIATION"
-                reason = "Configured evidence is present." if not missing else "Required evidence is missing: " + ", ".join(missing)
-            findings.append(ComplianceFinding(rule.rule_id, rule.version, status, rule.severity.value, reason, rule.evidence_required, rule.remediation_recommendations))
+                reason = (
+                    "Configured evidence is present."
+                    if not missing
+                    else "Required evidence is missing: " + ", ".join(missing)
+                )
+            findings.append(
+                ComplianceFinding(
+                    rule.rule_id,
+                    rule.version,
+                    status,
+                    rule.severity.value,
+                    reason,
+                    rule.evidence_required,
+                    rule.remediation_recommendations,
+                )
+            )
         return findings

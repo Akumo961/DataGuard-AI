@@ -7,7 +7,9 @@ class AuthorizationPolicy(ABC):
     """Central authorization port; business services must not infer roles ad hoc."""
 
     @abstractmethod
-    def require(self, tenant: TenantContext, permission: str, resource_id: str | None = None) -> None:
+    def require(
+        self, tenant: TenantContext, permission: str, resource_id: str | None = None
+    ) -> None:
         raise NotImplementedError
 
 

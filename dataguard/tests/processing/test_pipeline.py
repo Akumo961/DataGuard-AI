@@ -2,21 +2,32 @@ import json
 
 import pytest
 
-from dataguard.processing import DocumentInput, DocumentProcessingPipeline, DocumentValidator, UnsafeDocumentError
+from dataguard.processing import (
+    DocumentInput,
+    DocumentProcessingPipeline,
+    DocumentValidator,
+    UnsafeDocumentError,
+)
 
 
 def test_text_extraction() -> None:
-    result = DocumentProcessingPipeline().process(DocumentInput("notes.txt", b"Alice\n alice@example.ca  \n"))
+    result = DocumentProcessingPipeline().process(
+        DocumentInput("notes.txt", b"Alice\n alice@example.ca  \n")
+    )
     assert result.text == "Alice\n alice@example.ca"
 
 
 def test_json_extraction() -> None:
-    result = DocumentProcessingPipeline().process(DocumentInput("data.json", json.dumps({"email": "alice@example.ca"}).encode()))
+    result = DocumentProcessingPipeline().process(
+        DocumentInput("data.json", json.dumps({"email": "alice@example.ca"}).encode())
+    )
     assert "alice@example.ca" in result.text
 
 
 def test_csv_extraction() -> None:
-    result = DocumentProcessingPipeline().process(DocumentInput("data.csv", b"name,email\nAlice,alice@example.ca\n"))
+    result = DocumentProcessingPipeline().process(
+        DocumentInput("data.csv", b"name,email\nAlice,alice@example.ca\n")
+    )
     assert "Alice | alice@example.ca" in result.text
 
 

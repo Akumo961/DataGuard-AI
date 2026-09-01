@@ -62,9 +62,7 @@ async def _tenant_session(session: AsyncSession, organization_id: str) -> None:
     )
 
 
-def _governance(
-    text_value: str, request: AnalyzeRequest
-) -> GovernanceResponse | None:
+def _governance(text_value: str, request: AnalyzeRequest) -> GovernanceResponse | None:
     if not request.framework:
         return None
     root = Path(__file__).resolve().parents[2] / "compliance" / "frameworks"
@@ -263,11 +261,7 @@ def create_app() -> FastAPI:
         if settings.environment != "test":
             await _tenant_session(session, principal.organization_id)
             analysis_id = str(
-                (
-                    await _persist_analysis(
-                        session, principal, "text", None, payload
-                    )
-                ).id
+                (await _persist_analysis(session, principal, "text", None, payload)).id
             )
         return AnalyzeResponse(
             analysis_id=analysis_id,
@@ -441,9 +435,7 @@ def create_app() -> FastAPI:
             pid = UUID(pia_id)
             target = PIAStatus(request.target)
         except ValueError as exc:
-            raise HTTPException(
-                status_code=400, detail="Invalid PIA id or status"
-            ) from exc
+            raise HTTPException(status_code=400, detail="Invalid PIA id or status") from exc
         row = (
             await session.execute(
                 select(PIARecord).where(
@@ -474,9 +466,7 @@ def create_app() -> FastAPI:
         history.append(
             {
                 "version": entry.version,
-                "from_status": (
-                    entry.from_status.value if entry.from_status else None
-                ),
+                "from_status": (entry.from_status.value if entry.from_status else None),
                 "to_status": entry.to_status.value,
                 "actor_id": entry.actor_id,
                 "timestamp": entry.timestamp,
@@ -529,9 +519,7 @@ def create_app() -> FastAPI:
             try:
                 analysis_id = UUID(request.analysis_id)
             except ValueError as exc:
-                raise HTTPException(
-                    status_code=400, detail="Invalid analysis_id"
-                ) from exc
+                raise HTTPException(status_code=400, detail="Invalid analysis_id") from exc
             exists = (
                 await session.execute(
                     select(Analysis.id).where(

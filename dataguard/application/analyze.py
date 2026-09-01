@@ -25,7 +25,9 @@ class AnalyzeText:
     def __init__(self, dependencies: AnalysisDependencies) -> None:
         self.dependencies = dependencies
 
-    def execute(self, tenant: TenantContext, text: str, context: dict[str, Any] | None = None) -> AnalysisResult:
+    def execute(
+        self, tenant: TenantContext, text: str, context: dict[str, Any] | None = None
+    ) -> AnalysisResult:
         if not text or not text.strip():
             raise ValueError("text must not be empty")
         ctx = dict(context or {})
@@ -36,5 +38,7 @@ class AnalyzeText:
             findings = tuple(vars(f) for f in self.dependencies.compliance_engine.evaluate(ctx))
         result = AnalysisResult(str(uuid4()), tuple(detections), risk, findings)
         if self.dependencies.repository is not None:
-            self.dependencies.repository.save_analysis(tenant, {"analysis_id": result.analysis_id, "result": result})
+            self.dependencies.repository.save_analysis(
+                tenant, {"analysis_id": result.analysis_id, "result": result}
+            )
         return result

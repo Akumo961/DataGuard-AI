@@ -9,6 +9,7 @@ def test_local_access_token_round_trip(monkeypatch) -> None:
     monkeypatch.setenv("DATAGUARD_ENVIRONMENT", "development")
     monkeypatch.setenv("DATAGUARD_JWT_SECRET", "x" * 48)
     from dataguard.core.config import get_settings
+
     get_settings.cache_clear()
     token = create_access_token(
         subject_id="user-1", organization_id="org-1", roles={Role.ANALYST}, expires_minutes=10
@@ -23,6 +24,7 @@ def test_tampered_token_is_rejected(monkeypatch) -> None:
     monkeypatch.setenv("DATAGUARD_ENVIRONMENT", "development")
     monkeypatch.setenv("DATAGUARD_JWT_SECRET", "x" * 48)
     from dataguard.core.config import get_settings
+
     get_settings.cache_clear()
     token = create_access_token(subject_id="u", organization_id="o", roles={Role.VIEWER})
     header, _, signature = token.split(".")

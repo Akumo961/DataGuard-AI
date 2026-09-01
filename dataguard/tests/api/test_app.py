@@ -11,7 +11,17 @@ TEST_SECRET = "test-secret-with-at-least-32-characters"
 
 def token(org_id: str = "org-1", roles: list[str] | None = None) -> str:
     now = datetime.now(timezone.utc)
-    return jwt.encode({"sub": "user-1", "org_id": org_id, "roles": roles or ["analyst"], "iat": now, "exp": now + timedelta(minutes=5)}, TEST_SECRET, algorithm="HS256")
+    return jwt.encode(
+        {
+            "sub": "user-1",
+            "org_id": org_id,
+            "roles": roles or ["analyst"],
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+        },
+        TEST_SECRET,
+        algorithm="HS256",
+    )
 
 
 def test_health_does_not_require_auth(monkeypatch) -> None:
@@ -43,7 +53,11 @@ def test_analyze_is_tenant_scoped_and_redacts_value(monkeypatch) -> None:
     get_settings.cache_clear()
     try:
         client = TestClient(create_app())
-        response = client.post("/api/v1/analyze", headers={"Authorization": f"Bearer {token('org-42')}"}, json={"text": "Email alice@example.com"})
+        response = client.post(
+            "/api/v1/analyze",
+            headers={"Authorization": f"Bearer {token('org-42')}"},
+            json={"text": "Email alice@example.com"},
+        )
         assert response.status_code == 200
         body = response.json()
         assert body["organization_id"] == "org-42"
@@ -59,7 +73,11 @@ def test_viewer_cannot_write_analysis(monkeypatch) -> None:
     get_settings.cache_clear()
     try:
         client = TestClient(create_app())
-        response = client.post("/api/v1/analyze", headers={"Authorization": f"Bearer {token('org-42', ['viewer'])}"}, json={"text": "Email alice@example.com"})
+        response = client.post(
+            "/api/v1/analyze",
+            headers={"Authorization": f"Bearer {token('org-42', ['viewer'])}"},
+            json={"text": "Email alice@example.com"},
+        )
         assert response.status_code == 403
     finally:
         get_settings.cache_clear()
@@ -71,7 +89,11 @@ def test_analyst_cannot_manage_pia(monkeypatch) -> None:
     get_settings.cache_clear()
     try:
         client = TestClient(create_app())
-        response = client.post("/api/v1/pias", headers={"Authorization": f"Bearer {token('org-42', ['analyst'])}"}, json={"project_name": "Restricted"})
+        response = client.post(
+            "/api/v1/pias",
+            headers={"Authorization": f"Bearer {token('org-42', ['analyst'])}"},
+            json={"project_name": "Restricted"},
+        )
         assert response.status_code == 403
     finally:
         get_settings.cache_clear()

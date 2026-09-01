@@ -18,7 +18,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._redis_limiter = RedisRateLimiter(redis) if redis is not None else None
         self._memory_limiter = InMemoryRateLimiter()
 
-    async def dispatch(self, request, call_next: Callable[[object], Awaitable[Response]]) -> Response:
+    async def dispatch(
+        self, request, call_next: Callable[[object], Awaitable[Response]]
+    ) -> Response:
         if request.url.path in {"/health/live", "/health/ready"}:
             return await call_next(request)
         client = request.client.host if request.client else "unknown"
@@ -33,12 +35,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             else:
                 settings = get_settings()
                 if settings.environment == "production":
-                    return JSONResponse({"detail": "Rate limiting service unavailable"}, status_code=503)
+                    return JSONResponse(
+                        {"detail": "Rate limiting service unavailable"}, status_code=503
+                    )
                 allowed = await self._memory_limiter.allow(key, self._limit)
         except Exception:
             if get_settings().environment == "production":
-                return JSONResponse({"detail": "Rate limiting service unavailable"}, status_code=503)
+                return JSONResponse(
+                    {"detail": "Rate limiting service unavailable"}, status_code=503
+                )
             allowed = await self._memory_limiter.allow(key, self._limit)
         if not allowed:
-            return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429, headers={"Retry-After": "60"})
+            return JSONResponse(
+                {"detail": "Rate limit exceeded"}, status_code=429, headers={"Retry-After": "60"}
+            )
         return await call_next(request)

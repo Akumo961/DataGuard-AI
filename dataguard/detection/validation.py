@@ -11,7 +11,7 @@ class DetectionValidator:
     def validate(self, text: str, detections: list[Detection]) -> list[Detection]:
         result: list[Detection] = []
         for detection in detections:
-            value = detection.value or text[detection.start:detection.end]
+            value = detection.value or text[detection.start : detection.end]
             if detection.pii_type is PIIType.EMAIL and "@" not in value:
                 continue
             if detection.pii_type is PIIType.PHONE and len(re.sub(r"\D", "", value)) < 10:

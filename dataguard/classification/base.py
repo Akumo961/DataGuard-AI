@@ -24,5 +24,7 @@ class Classifier(ABC):
     name: str
 
     @abstractmethod
-    def classify(self, text: str, detections: list[Detection], context: dict[str, Any]) -> Classification:
+    def classify(
+        self, text: str, detections: list[Detection], context: dict[str, Any]
+    ) -> Classification:
         raise NotImplementedError

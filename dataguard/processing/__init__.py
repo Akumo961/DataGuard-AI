@@ -2,4 +2,11 @@ from dataguard.processing.models import DocumentInput, DocumentType, ExtractedDo
 from dataguard.processing.pipeline import DocumentProcessingPipeline
 from dataguard.processing.validation import DocumentValidator, UnsafeDocumentError
 
-__all__ = ["DocumentInput", "DocumentProcessingPipeline", "DocumentType", "DocumentValidator", "ExtractedDocument", "UnsafeDocumentError"]
+__all__ = [
+    "DocumentInput",
+    "DocumentProcessingPipeline",
+    "DocumentType",
+    "DocumentValidator",
+    "ExtractedDocument",
+    "UnsafeDocumentError",
+]

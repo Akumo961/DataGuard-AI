@@ -6,7 +6,9 @@ from dataguard.domain.models import Detection
 
 
 class PIIDetectionPipeline:
-    def __init__(self, engine: DetectionEngine, validator: DetectionValidator | None = None) -> None:
+    def __init__(
+        self, engine: DetectionEngine, validator: DetectionValidator | None = None
+    ) -> None:
         self.engine = engine
         self.validator = validator or DetectionValidator()
 

@@ -19,13 +19,17 @@ def _clean(text: str) -> str:
 
 class TextExtractor:
     def extract(self, filename: str, content: bytes) -> ExtractedDocument:
-        return ExtractedDocument(filename, DocumentType.TXT, _clean(content.decode("utf-8-sig", errors="strict")))
+        return ExtractedDocument(
+            filename, DocumentType.TXT, _clean(content.decode("utf-8-sig", errors="strict"))
+        )
 
 
 class JSONExtractor:
     def extract(self, filename: str, content: bytes) -> ExtractedDocument:
         value = json.loads(content.decode("utf-8-sig"))
-        return ExtractedDocument(filename, DocumentType.JSON, _clean(json.dumps(value, ensure_ascii=False, indent=2)))
+        return ExtractedDocument(
+            filename, DocumentType.JSON, _clean(json.dumps(value, ensure_ascii=False, indent=2))
+        )
 
 
 class CSVExtractor:
@@ -39,6 +43,7 @@ class CSVExtractor:
 class PDFExtractor:
     def extract(self, filename: str, content: bytes) -> ExtractedDocument:
         from pypdf import PdfReader
+
         reader = PdfReader(io.BytesIO(content), strict=True)
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
         return ExtractedDocument(filename, DocumentType.PDF, _clean(text), len(reader.pages))
@@ -47,6 +52,7 @@ class PDFExtractor:
 class DOCXExtractor:
     def extract(self, filename: str, content: bytes) -> ExtractedDocument:
         from docx import Document
+
         document = Document(io.BytesIO(content))
         parts = [p.text for p in document.paragraphs]
         for table in document.tables:
@@ -57,6 +63,7 @@ class DOCXExtractor:
 class XLSXExtractor:
     def extract(self, filename: str, content: bytes) -> ExtractedDocument:
         from openpyxl import load_workbook
+
         workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         try:
             parts: list[str] = []
@@ -72,9 +79,18 @@ class XLSXExtractor:
 class ImageExtractor:
     def extract(self, filename: str, content: bytes) -> ExtractedDocument:
         from PIL import Image
+
         image = Image.open(io.BytesIO(content))
         image.verify()
         if os.getenv("DATAGUARD_OCR_ENABLED", "false").lower() != "true":
-            return ExtractedDocument(filename, DocumentType.IMAGE, "", warnings=("OCR is disabled; set DATAGUARD_OCR_ENABLED=true to extract image text.",))
+            return ExtractedDocument(
+                filename,
+                DocumentType.IMAGE,
+                "",
+                warnings=(
+                    "OCR is disabled; set DATAGUARD_OCR_ENABLED=true to extract image text.",
+                ),
+            )
         from dataguard.processing.ocr import OCRExtractor
+
         return OCRExtractor().extract(filename, content)
