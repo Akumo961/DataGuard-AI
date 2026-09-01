@@ -44,6 +44,8 @@ def verify_chain_detailed(records: Iterable[AuditRecord]) -> dict[str, Any]:
                     "event_id": record.event_id,
                     "previous_event_id": previous_event_id,
                     "reason": "previous_hash_mismatch",
+                    "expected_previous_hash": previous_hash,
+                    "stored_previous_hash": record.previous_hash,
                 },
             }
         expected_hash = canonical_hash(record, previous_hash)
@@ -56,6 +58,8 @@ def verify_chain_detailed(records: Iterable[AuditRecord]) -> dict[str, Any]:
                     "event_id": record.event_id,
                     "previous_event_id": previous_event_id,
                     "reason": "integrity_hash_mismatch",
+                    "expected_hash": expected_hash,
+                    "stored_hash": record.integrity_hash,
                 },
             }
         previous_hash = record.integrity_hash
