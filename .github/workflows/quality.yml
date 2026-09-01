@@ -73,6 +73,20 @@ jobs:
           done
           docker compose logs
           exit 1
+      - name: Verify configured multilingual NER model is installed
+        run: docker compose exec -T api python -c 'import spacy; nlp=spacy.load("xx_ent_wiki_sm"); assert "ner" in nlp.pipe_names; print(nlp.meta["name"], nlp.meta["version"])'
+      - name: Verify development-only registration and login
+        run: |
+          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/auth/register \
+            -H 'Content-Type: application/json' \
+            -d '{"organization_name":"CI Local Auth","organization_slug":"ci-local-auth","email":"dev@example.invalid","password":"local-development-password","display_name":"CI Developer"}' \
+            | tee /tmp/register.json
+          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"organization_slug":"ci-local-auth","email":"dev@example.invalid","password":"local-development-password"}' \
+            | tee /tmp/login.json
+          grep -q '"token_type":"bearer"' /tmp/login.json
+          test -n "$(python -c 'import json; print(json.load(open("/tmp/login.json"))["access_token"])')"
       - name: Seed isolated CI tenant
         run: docker compose exec -T postgres psql -U dataguard -d dataguard -c "INSERT INTO organizations (id, slug, name, active) VALUES ('00000000-0000-0000-0000-000000000042', 'ci-tenant', 'CI Tenant', true) ON CONFLICT (id) DO NOTHING;"
       - name: Exercise authenticated tenant workflow
