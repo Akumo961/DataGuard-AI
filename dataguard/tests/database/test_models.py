@@ -3,7 +3,6 @@ from dataguard.database.models import (
     APIKey,
     Analysis,
     AuditEvent,
-    Organization,
     RefreshToken,
     SecurityEvent,
     User,
