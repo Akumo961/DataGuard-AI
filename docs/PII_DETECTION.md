@@ -1,21 +1,23 @@
-# PII Detection Engine
+# PII detection scope and limitations
 
-DataGuard uses a layered detection architecture. The current production-safe baseline is deterministic regex detection plus validation. An optional NER adapter and ensemble boundary are provided for independently evaluated models.
+DataGuard combines deterministic regex/contextual rules with an optional externally supplied NER adapter. Detection is **best-effort discovery**, not a completeness guarantee.
 
-## Layers
+## PERSON
 
-1. Pattern detection: email, phone, IP, credit-card-shaped values, SIN-shaped values, passport-shaped values and ISO-like dates.
-2. NER adapter: integrates an externally evaluated NER model through an explicit taxonomy mapping.
-3. Transformer/classification adapters: reserved behind the same detector contract; no unsupported production model is bundled.
-4. Contextual validation: removes obvious invalid candidates.
-5. Confidence scoring: every detection carries a bounded confidence score and detector provenance.
-6. Rule validation: credit-card candidates use Luhn validation; other identifiers use conservative structural checks.
-7. Human review: the domain model remains compatible with review workflows; review persistence belongs to later workflow phases.
+The baseline detector recognizes high-signal forms such as:
 
-## Privacy
+- labeled names (`Nom`, `Prénom`, `Name`);
+- honorific + name (`Mme Marie Tremblay`, `Dr Jean Tremblay`);
+- explicit name-context phrases (`first name`, `last name`, `nom de famille`).
 
-The detector operates on text and returns offsets, type, confidence and provenance. Callers should avoid persisting raw values unless required by an approved purpose. Production integrations should prefer redaction or tokenization before persistence.
+It intentionally does **not** classify every sequence of capitalized words as a person. This reduces false positives for organizations, departments and document titles.
 
-## Limitations
+## ADDRESS
 
-Regex cannot establish identity or legal sensitivity by itself. Passport, government-ID and date patterns are intentionally conservative heuristics and require contextual/model confirmation. No accuracy or recall claim is made by this implementation. Evaluation datasets and reproducible benchmark results are part of the ML validation workstream.
+The detector recognizes high-signal civic-address patterns including street types in English/French and Canadian postal-code context. It does not guarantee detection of every free-form, rural, international, PO-box or malformed address.
+
+## Operational limitation
+
+False negatives and false positives remain possible, especially with OCR errors, unusual formatting, multilingual text and names that resemble ordinary words. Production deployments should evaluate the detector against representative, de-identified customer corpora and monitor precision/recall by PII type.
+
+The optional `NERDetector` is an adapter boundary only; no pretrained NER model is bundled or represented as production-ready. A model must be independently evaluated, mapped to the DataGuard taxonomy and versioned before use.
