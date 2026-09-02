@@ -14,7 +14,9 @@ JobHandler = Callable[[JobRecord], Awaitable[None]]
 class AnalysisWorker:
     """Process durable jobs without placing customer content in the queue envelope."""
 
-    def __init__(self, redis: Redis, handler: JobHandler, *, group: str = "analysis-workers") -> None:
+    def __init__(
+        self, redis: Redis, handler: JobHandler, *, group: str = "analysis-workers"
+    ) -> None:
         self.queue = JobQueue(redis)
         self.handler = handler
         self.group = group
@@ -43,4 +45,6 @@ async def serve(redis_url: str, handler: JobHandler, consumer: str) -> None:
 
 
 if __name__ == "__main__":
-    raise SystemExit("Provide a handler from the application worker entrypoint; raw documents must not be queued.")
+    raise SystemExit(
+        "Provide a handler from the application worker entrypoint; raw documents must not be queued."
+    )

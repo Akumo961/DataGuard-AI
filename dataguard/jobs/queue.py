@@ -38,16 +38,22 @@ class JobQueue:
             payload=payload,
             created_at=time.time(),
         )
-        await self.redis.xadd(self.stream, {"job": json.dumps(asdict(record), separators=(",", ":"))})
+        await self.redis.xadd(
+            self.stream, {"job": json.dumps(asdict(record), separators=(",", ":"))}
+        )
         return record
 
-    async def claim(self, group: str, consumer: str, block_ms: int = 1000) -> tuple[str, JobRecord] | None:
+    async def claim(
+        self, group: str, consumer: str, block_ms: int = 1000
+    ) -> tuple[str, JobRecord] | None:
         try:
             await self.redis.xgroup_create(self.stream, group, id="0", mkstream=True)
         except Exception as exc:
             if "BUSYGROUP" not in str(exc):
                 raise
-        rows = await self.redis.xreadgroup(group, consumer, {self.stream: ">"}, count=1, block=block_ms)
+        rows = await self.redis.xreadgroup(
+            group, consumer, {self.stream: ">"}, count=1, block=block_ms
+        )
         if not rows:
             return None
         _, entries = rows[0]
@@ -62,11 +68,17 @@ class JobQueue:
     async def ack(self, group: str, message_id: str) -> None:
         await self.redis.xack(self.stream, group, message_id)
 
-    async def retry(self, group: str, message_id: str, job: JobRecord, max_attempts: int = 5) -> None:
+    async def retry(
+        self, group: str, message_id: str, job: JobRecord, max_attempts: int = 5
+    ) -> None:
         if job.attempt + 1 >= max_attempts:
             await self.redis.xadd(
                 self.dead_letter_stream,
-                {"job": json.dumps(asdict(JobRecord(**{**asdict(job), "attempt": job.attempt + 1})))},
+                {
+                    "job": json.dumps(
+                        asdict(JobRecord(**{**asdict(job), "attempt": job.attempt + 1}))
+                    )
+                },
             )
             await self.ack(group, message_id)
             return
