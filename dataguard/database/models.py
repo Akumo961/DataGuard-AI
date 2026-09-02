@@ -109,7 +109,7 @@ class SecurityEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
         ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    actor_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     details: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
@@ -121,7 +121,7 @@ class AuditEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
     organization_id: Mapped[UUID] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    actor_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     object_type: Mapped[str] = mapped_column(String(100), nullable=False)
     object_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -139,10 +139,6 @@ class AuditEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
 def _hash_audit_event(mapper, connection, target: AuditEvent) -> None:
     """Serialize every audit insert into an organization-scoped hash chain."""
     del mapper
-    # SQLAlchemy may not have invoked the mapped-column Python default yet when
-    # mapper before_insert fires. The event id is part of the signed payload, so
-    # allocate it explicitly before hashing to guarantee the persisted UUID and
-    # the hashed UUID are identical.
     if target.id is None:
         target.id = uuid4()
 
