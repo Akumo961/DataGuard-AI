@@ -141,7 +141,7 @@ async def _persist_analysis(
     session.add(
         AuditEvent(
             organization_id=UUID(principal.organization_id),
-            actor_id=None,
+            actor_id=principal.subject,
             action="ANALYSIS_COMPLETED",
             object_type="analysis",
             object_id=str(analysis.id),
@@ -394,7 +394,7 @@ def create_app() -> FastAPI:
         session.add(
             AuditEvent(
                 organization_id=UUID(principal.organization_id),
-                actor_id=None,
+                actor_id=principal.subject,
                 action="PIA_CREATED",
                 object_type="pia",
                 object_id=str(row.id),
@@ -476,7 +476,7 @@ def create_app() -> FastAPI:
         session.add(
             AuditEvent(
                 organization_id=UUID(principal.organization_id),
-                actor_id=None,
+                actor_id=principal.subject,
                 action="PIA_TRANSITIONED",
                 object_type="pia",
                 object_id=str(row.id),
@@ -539,7 +539,7 @@ def create_app() -> FastAPI:
         session.add(
             AuditEvent(
                 organization_id=UUID(principal.organization_id),
-                actor_id=None,
+                actor_id=principal.subject,
                 action="REMEDIATION_CREATED",
                 object_type="remediation",
                 object_id=str(row.id),
