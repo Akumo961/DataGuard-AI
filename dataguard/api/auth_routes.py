@@ -51,7 +51,9 @@ async def _set_tenant_context(session: AsyncSession, organization_id) -> None:
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(request: RegisterRequest, session: AsyncSession = Depends(get_session)) -> dict:
+async def register(
+    request: RegisterRequest, session: AsyncSession = Depends(get_session)
+) -> dict:
     _require_development()
     email = request.email.strip().lower()
     organization = Organization(
@@ -76,7 +78,9 @@ async def register(request: RegisterRequest, session: AsyncSession = Depends(get
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(status_code=409, detail="Organization or email already exists") from exc
+        raise HTTPException(
+            status_code=409, detail="Organization or email already exists"
+        ) from exc
     return {"organization_id": str(organization.id), "user_id": str(user.id), "email": email}
 
 
