@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from dataguard.database.base import Base, TenantScopedMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from dataguard.security.audit_context import get_context
 
 
 class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -167,6 +168,7 @@ class AuditEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
     new_state: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    client: Mapped[str | None] = mapped_column(String(255), nullable=True)
     result: Mapped[str] = mapped_column(String(32), nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     previous_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
@@ -178,6 +180,10 @@ def _hash_audit_event(mapper, connection, target: AuditEvent) -> None:
     del mapper
     if target.id is None:
         target.id = uuid4()
+    context = get_context()
+    target.request_id = target.request_id or context.request_id
+    target.ip_address = target.ip_address or context.ip_address
+    target.client = target.client or context.client
     org = str(target.organization_id)
     if connection.dialect.name == "postgresql":
         connection.execute(text("SELECT pg_advisory_xact_lock(hashtext(:org))"), {"org": org})
@@ -202,6 +208,7 @@ def _hash_audit_event(mapper, connection, target: AuditEvent) -> None:
         "previous_state": target.previous_state,
         "new_state": target.new_state,
         "ip_address": target.ip_address,
+        "client": target.client,
         "request_id": target.request_id or "",
         "result": target.result,
         "previous_hash": previous_hash,
