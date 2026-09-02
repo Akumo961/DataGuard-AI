@@ -18,6 +18,7 @@ from dataguard.api.dependencies import Principal, require_permission
 from dataguard.api.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
+    ClassificationResponse,
     DetectionResponse,
     GovernanceResponse,
     PIARequest,
@@ -27,6 +28,7 @@ from dataguard.api.schemas import (
     RemediationResponse,
     RiskResponse,
 )
+from dataguard.classification.rules import RuleBasedClassifier
 from dataguard.compliance.engine import ComplianceEngine
 from dataguard.compliance.loader import FrameworkLoader
 from dataguard.core.config import get_settings
@@ -98,7 +100,7 @@ def _governance(text_value: str, request: AnalyzeRequest) -> GovernanceResponse 
     )
 
 
-def _analysis_payload(detections, risk, governance):
+def _analysis_payload(detections, classification, risk, governance):
     return {
         "detections": [
             {
@@ -111,6 +113,12 @@ def _analysis_payload(detections, risk, governance):
             }
             for detection in detections
         ],
+        "classification": {
+            "label": classification.label,
+            "confidence": classification.confidence,
+            "rationale": classification.rationale,
+            "model_version": classification.model_version,
+        },
         "risk": {
             "score": risk.score,
             "level": risk.level.value,
@@ -196,6 +204,7 @@ def create_app() -> FastAPI:
     frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
     app.mount("/frontend", StaticFiles(directory=frontend_dir), name="frontend")
     pipeline = PIIDetectionPipeline(EnsembleDetector([RegexPIIDetector()]))
+    classifier = RuleBasedClassifier()
     risk_engine = RiskEngine()
     document_pipeline = DocumentProcessingPipeline()
 
@@ -239,6 +248,11 @@ def create_app() -> FastAPI:
         session: AsyncSession = Depends(get_session),
     ) -> AnalyzeResponse:
         detections = pipeline.detect(request.text)
+        classification = classifier.classify(
+            request.text,
+            detections,
+            {"organization_id": principal.organization_id, "framework": request.framework},
+        )
         risk = risk_engine.assess(
             detections,
             RiskContext(
@@ -252,7 +266,7 @@ def create_app() -> FastAPI:
             ),
         )
         governance = _governance(request.text, request)
-        payload = _analysis_payload(detections, risk, governance)
+        payload = _analysis_payload(detections, classification, risk, governance)
         analysis_id = None
         if settings.environment != "test":
             await _tenant_session(session, principal.organization_id)
@@ -273,6 +287,12 @@ def create_app() -> FastAPI:
                 )
                 for detection in detections
             ],
+            classification=ClassificationResponse(
+                label=classification.label,
+                confidence=classification.confidence,
+                rationale=classification.rationale,
+                model_version=classification.model_version,
+            ),
             risk=RiskResponse(
                 score=risk.score,
                 level=risk.level.value,
@@ -298,10 +318,15 @@ def create_app() -> FastAPI:
             DocumentInput(file.filename or "upload", content, file.content_type)
         )
         detections = pipeline.detect(extracted.text)
+        classification = classifier.classify(
+            extracted.text,
+            detections,
+            {"organization_id": principal.organization_id, "document_type": extracted.document_type.value},
+        )
         risk = risk_engine.assess(detections, RiskContext())
         request = AnalyzeRequest(text=extracted.text)
         governance = _governance(extracted.text, request)
-        payload = _analysis_payload(detections, risk, governance)
+        payload = _analysis_payload(detections, classification, risk, governance)
         payload["document"] = {
             "filename": extracted.filename,
             "document_type": extracted.document_type.value,
@@ -336,6 +361,12 @@ def create_app() -> FastAPI:
                 )
                 for detection in detections
             ],
+            classification=ClassificationResponse(
+                label=classification.label,
+                confidence=classification.confidence,
+                rationale=classification.rationale,
+                model_version=classification.model_version,
+            ),
             risk=RiskResponse(
                 score=risk.score,
                 level=risk.level.value,
