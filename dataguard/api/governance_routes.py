@@ -74,6 +74,28 @@ async def metrics_endpoint(
     return PlainTextResponse(metrics.render(), media_type="text/plain; version=0.0.4")
 
 
+@router.get("/api/v1/findings/{finding_id}", response_model=FindingResponse, tags=["findings"])
+async def get_finding(
+    finding_id: str,
+    principal: Principal = Depends(require_permission("finding:read")),
+    session: AsyncSession = Depends(get_session),
+) -> FindingResponse:
+    """Return a finding only when it belongs to the caller's tenant."""
+    await _set_tenant(session, principal.organization_id)
+    fid = _uuid(finding_id, "Invalid finding id")
+    row = (
+        await session.execute(
+            select(Finding).where(
+                Finding.id == fid,
+                Finding.organization_id == UUID(principal.organization_id),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return _finding(row)
+
+
 @router.patch("/api/v1/findings/{finding_id}", response_model=FindingResponse, tags=["findings"])
 async def update_finding(
     finding_id: str,
