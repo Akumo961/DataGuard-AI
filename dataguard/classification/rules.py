@@ -67,7 +67,9 @@ class RuleBasedClassifier(Classifier):
         for label, policy_attr in self._levels:
             if detected_types & getattr(self.policy, policy_attr):
                 confidence = min(
-                    item.confidence for item in detections if item.pii_type.value in detected_types
+                    item.confidence
+                    for item in detections
+                    if item.pii_type.value in detected_types
                 )
                 return Classification(
                     label=label,
