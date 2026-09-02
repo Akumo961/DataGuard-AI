@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from dataguard.api.dependencies import Principal, get_principal, require_permission
 from dataguard.api.schemas import ClassificationPolicyRequest, ClassificationPolicyResponse
 from dataguard.core.config import get_settings
-from dataguard.database.models import Organization, User, UserRole
+from dataguard.database.models import AuditEvent, Organization, User, UserRole
 from dataguard.database.session import get_session
 from dataguard.security.auth import create_access_token
 from dataguard.security.passwords import hash_password, verify_password
@@ -189,7 +189,23 @@ async def update_classification_policy(
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Organization not found")
+    previous = row.classification_policy
     policy = request.model_dump()
     row.classification_policy = policy
+    session.add(
+        AuditEvent(
+            organization_id=UUID(principal.organization_id),
+            actor_id=principal.subject,
+            action="CLASSIFICATION_POLICY_UPDATED",
+            object_type="organization_classification_policy",
+            object_id=principal.organization_id,
+            previous_state=previous,
+            new_state=policy,
+            request_id=None,
+            ip_address=None,
+            result="SUCCESS",
+            occurred_at=datetime.now(timezone.utc),
+        )
+    )
     await session.commit()
     return ClassificationPolicyResponse(organization_id=principal.organization_id, **policy)
