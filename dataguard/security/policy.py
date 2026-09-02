@@ -34,6 +34,10 @@ class AuthorizationPolicy:
     _permissions: dict[str, frozenset[Role]] = {
         "analysis:read": frozenset(Role),
         "analysis:write": frozenset({Role.ANALYST, Role.PRIVACY_OFFICER, Role.ORG_ADMIN}),
+        "finding:read": frozenset(Role),
+        "finding:manage": frozenset(
+            {Role.ANALYST, Role.PRIVACY_OFFICER, Role.SECURITY_ADMIN, Role.ORG_ADMIN}
+        ),
         "pii:review": frozenset(
             {Role.ANALYST, Role.PRIVACY_OFFICER, Role.SECURITY_ADMIN, Role.ORG_ADMIN}
         ),
