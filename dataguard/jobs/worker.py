@@ -30,7 +30,10 @@ class AnalysisWorker:
             try:
                 await self.handler(job)
             except Exception:
-                LOGGER.exception("DataGuard job failed", extra={"job_id": job.id, "kind": job.kind})
+                LOGGER.exception(
+                    "DataGuard job failed",
+                    extra={"job_id": job.id, "kind": job.kind},
+                )
                 await self.queue.retry(self.group, message_id, job)
             else:
                 await self.queue.ack(self.group, message_id)
