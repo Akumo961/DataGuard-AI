@@ -62,6 +62,8 @@ def test_analyze_redacts_entire_pii_value(monkeypatch) -> None:
         body = response.json()
         assert body["organization_id"] == "org-42"
         assert body["detections"][0]["redacted_value"] == "[REDACTED]"
+        assert body["classification"]["label"] == "CONFIDENTIAL"
+        assert body["classification"]["model_version"] == "rules-v1"
         assert "alice@example.com" not in response.text
         assert "example.com" not in response.text
     finally:
