@@ -29,8 +29,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "no-store" if request.url.path.startswith("/api/") else "no-cache"
         )
         if get_settings().security_headers_enabled:
+            # The application serves its frontend assets from the same origin. Keep the
+            # policy restrictive while explicitly allowing those static assets to execute.
             response.headers["Content-Security-Policy"] = (
-                "default-src 'none'; frame-ancestors 'none'"
+                "default-src 'self'; "
+                "script-src 'self'; "
+                "style-src 'self'; "
+                "img-src 'self' data:; "
+                "object-src 'none'; "
+                "base-uri 'none'; "
+                "form-action 'self'; "
+                "frame-ancestors 'none'"
             )
         if request.url.scheme == "https":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"

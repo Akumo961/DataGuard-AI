@@ -1,9 +1,12 @@
 name: DataGuard Quality
 
+# Final quality gate: static analysis, tests, dependency audit and full Docker/E2E coverage remain mandatory.
+
 on:
   push:
-    branches: [main, "production/**"]
+    branches: ["**"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,7 +14,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -56,7 +59,7 @@ jobs:
 
   docker-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       POSTGRES_PASSWORD: dataguard-ci-password
       SECRET_KEY: ci-secret-key-with-more-than-32-characters
@@ -77,29 +80,21 @@ jobs:
         run: docker compose exec -T api python -c 'import spacy; nlp=spacy.load("xx_ent_wiki_sm"); assert "ner" in nlp.pipe_names; print(nlp.meta["name"], nlp.meta["version"])'
       - name: Verify development-only registration and login
         run: |
-          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/auth/register \
-            -H 'Content-Type: application/json' \
-            -d '{"organization_name":"CI Local Auth","organization_slug":"ci-local-auth","email":"dev@example.invalid","password":"local-development-password","display_name":"CI Developer"}' \
-            | tee /tmp/register.json
-          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/auth/login \
-            -H 'Content-Type: application/json' \
-            -d '{"organization_slug":"ci-local-auth","email":"dev@example.invalid","password":"local-development-password"}' \
-            | tee /tmp/login.json
+          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/auth/register -H 'Content-Type: application/json' -d '{"organization_name":"CI Local Auth","organization_slug":"ci-local-auth","email":"dev@example.invalid","password":"local-development-password","display_name":"CI Developer"}' | tee /tmp/register.json
+          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{"organization_slug":"ci-local-auth","email":"dev@example.invalid","password":"local-development-password"}' | tee /tmp/login.json
           grep -q '"token_type":"bearer"' /tmp/login.json
           test -s /tmp/login.json
           test -n "$(python -c 'import json; print(json.load(open("/tmp/login.json"))["access_token"])')"
       - name: Seed isolated CI tenant
-        run: docker compose exec -T postgres psql -U dataguard -d dataguard -c "INSERT INTO organizations (id, slug, name, active) VALUES ('00000000-0000-0000-0000-000000000042', 'ci-tenant', 'CI Tenant', true) ON CONFLICT (id) DO NOTHING;"
+        run: docker compose exec -T postgres psql -U dataguard -d dataguard -c "INSERT INTO organizations (id, slug, name, active) VALUES ('00000000-0000-0000-0000-000000000042', 'ci-tenant', 'CI Tenant', true), ('00000000-0000-0000-0000-000000000043', 'ci-tenant-b', 'CI Tenant B', true) ON CONFLICT (id) DO NOTHING;"
       - name: Exercise authenticated tenant workflow
         run: |
           TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000001","org":"00000000-0000-0000-0000-000000000042","roles":["analyst"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
-          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/analyze \
-            -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
-            -d '{"text":"Email alice@example.com","purpose_defined":true,"encrypted_at_rest":true,"access_scope":"internal","data_location":"quebec"}' \
-            | tee /tmp/analysis.json
+          curl --fail --silent -X POST http://127.0.0.1:8000/api/v1/analyze -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' -d '{"text":"Email alice@example.com","purpose_defined":true,"encrypted_at_rest":true,"access_scope":"internal","data_location":"quebec"}' | tee /tmp/analysis.json
           grep -q '"organization_id":"00000000-0000-0000-0000-000000000042"' /tmp/analysis.json
           test -s /tmp/analysis.json
           test "$(python -c 'import json; print(json.load(open("/tmp/analysis.json"))["analysis_id"])')" != "None"
+          grep -q '"classification"' /tmp/analysis.json
       - name: Verify audit integrity endpoint passes on valid persisted chain
         run: |
           TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000001","org":"00000000-0000-0000-0000-000000000042","roles":["privacy_officer"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
@@ -140,6 +135,12 @@ xref=len(data); data+=f"xref\\n0 {len(objects)+1}\\n0000000000 65535 f \\n".enco
           test -n "${PDF_ID}" && test "${PDF_ID}" != "None"
           curl --fail --silent -H "Authorization: Bearer ${TOKEN}" http://127.0.0.1:8000/api/v1/analyses/${PDF_ID} | tee /tmp/pdf-persisted.json
           grep -q '"document_type":"pdf"' /tmp/pdf-persisted.json
+      - name: Verify malformed JSON upload is rejected as a client error
+        run: |
+          printf '{"email":' > /tmp/malformed.json
+          TOKEN=$(docker compose exec -T api python -c 'import jwt; from datetime import datetime, timedelta, timezone; n=datetime.now(timezone.utc); print(jwt.encode({"sub":"00000000-0000-0000-0000-000000000001","org":"00000000-0000-0000-0000-000000000042","roles":["analyst"],"iat":n,"exp":n+timedelta(minutes=5)}, "ci-jwt-secret-with-more-than-32-characters", algorithm="HS256"))')
+          test "$(curl --silent -o /tmp/malformed-response.json -w '%{http_code}' -X POST http://127.0.0.1:8000/api/v1/documents -H "Authorization: Bearer ${TOKEN}" -F 'file=@/tmp/malformed.json;type=application/json')" = "400"
+          grep -q 'malformed' /tmp/malformed-response.json
       - name: Verify malicious archive upload is rejected
         run: |
           docker compose exec -T api python -c 'import zipfile; z=zipfile.ZipFile("/tmp/dataguard-bomb.docx", "w"); [z.writestr(f"member-{i}.txt", b"x") for i in range(501)]; z.close()'

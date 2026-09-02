@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,10 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from dataguard.api.dependencies import Principal, require_permission
+from dataguard.api.auth_routes import router as auth_router
+from dataguard.api.document_routes import router as document_router
+from dataguard.api.governance_routes import router as governance_router
 from dataguard.api.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
+    ClassificationResponse,
     DetectionResponse,
+    FindingResponse,
     GovernanceResponse,
     PIARequest,
     PIAResponse,
@@ -27,14 +32,16 @@ from dataguard.api.schemas import (
     RemediationResponse,
     RiskResponse,
 )
+from dataguard.classification.rules import RuleBasedClassifier
 from dataguard.compliance.engine import ComplianceEngine
 from dataguard.compliance.loader import FrameworkLoader
 from dataguard.core.config import get_settings
-from dataguard.database.models import Analysis, AuditEvent, PIARecord, RemediationItem
+from dataguard.database.models import Analysis, AuditEvent, Finding, PIARecord, RemediationItem
 from dataguard.database.session import engine, get_session
 from dataguard.detection.ensemble import EnsembleDetector
 from dataguard.detection.pipeline import PIIDetectionPipeline
 from dataguard.detection.regex import RegexPIIDetector
+from dataguard.jobs.queue import JobQueue
 from dataguard.pia.models import PIA, PIAStatus
 from dataguard.pia.workflow import PIAWorkflow
 from dataguard.processing.models import DocumentInput
@@ -69,8 +76,7 @@ def _governance(text_value: str, request: AnalyzeRequest) -> GovernanceResponse 
         rules = FrameworkLoader(root).load(request.framework)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(
-            status_code=400,
-            detail=f"Unknown compliance framework: {request.framework}",
+            status_code=400, detail=f"Unknown compliance framework: {request.framework}"
         ) from exc
     evidence = {
         "pii_detected": bool(text_value),
@@ -80,7 +86,7 @@ def _governance(text_value: str, request: AnalyzeRequest) -> GovernanceResponse 
         "access_scope_defined": request.access_scope != "unknown",
         "data_location_defined": request.data_location != "unknown",
     }
-    findings = ComplianceEngine(rules).evaluate(evidence)
+    findings = ComplianceEngine(rules, framework=request.framework).evaluate(evidence)
     return GovernanceResponse(
         framework=request.framework,
         findings=[
@@ -98,19 +104,25 @@ def _governance(text_value: str, request: AnalyzeRequest) -> GovernanceResponse 
     )
 
 
-def _analysis_payload(detections, risk, governance):
+def _analysis_payload(detections, classification, risk, governance):
     return {
         "detections": [
             {
-                "type": detection.pii_type.value,
-                "start": detection.start,
-                "end": detection.end,
-                "confidence": detection.confidence,
-                "detector": detection.detector,
-                "redacted_value": _redact(detection.value),
+                "type": d.pii_type.value,
+                "start": d.start,
+                "end": d.end,
+                "confidence": d.confidence,
+                "detector": d.detector,
+                "redacted_value": _redact(d.value),
             }
-            for detection in detections
+            for d in detections
         ],
+        "classification": {
+            "label": classification.label,
+            "confidence": classification.confidence,
+            "rationale": classification.rationale,
+            "model_version": classification.model_version,
+        },
         "risk": {
             "score": risk.score,
             "level": risk.level.value,
@@ -138,10 +150,28 @@ async def _persist_analysis(
     )
     session.add(analysis)
     await session.flush()
+    classification = payload["classification"]
+    session.add_all(
+        Finding(
+            organization_id=UUID(principal.organization_id),
+            analysis_id=analysis.id,
+            pii_type=item["type"],
+            start_offset=item["start"],
+            end_offset=item["end"],
+            confidence=item["confidence"],
+            detector=item["detector"],
+            classification_label=classification["label"],
+            classification_confidence=classification["confidence"],
+            status="OPEN",
+            owner_id=principal.subject,
+            evidence={"redacted_value": item["redacted_value"], "detector": item["detector"]},
+        )
+        for item in payload["detections"]
+    )
     session.add(
         AuditEvent(
             organization_id=UUID(principal.organization_id),
-            actor_id=None,
+            actor_id=principal.subject,
             action="ANALYSIS_COMPLETED",
             object_type="analysis",
             object_id=str(analysis.id),
@@ -196,6 +226,7 @@ def create_app() -> FastAPI:
     frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
     app.mount("/frontend", StaticFiles(directory=frontend_dir), name="frontend")
     pipeline = PIIDetectionPipeline(EnsembleDetector([RegexPIIDetector()]))
+    classifier = RuleBasedClassifier()
     risk_engine = RiskEngine()
     document_pipeline = DocumentProcessingPipeline()
 
@@ -227,10 +258,7 @@ def create_app() -> FastAPI:
                 checks["redis"] = "degraded"
         else:
             checks["redis"] = "disabled"
-        return {
-            "status": "ok" if all(value == "ok" for value in checks.values()) else "degraded",
-            **checks,
-        }
+        return {"status": "ok", **checks}
 
     @app.post("/api/v1/analyze", response_model=AnalyzeResponse, tags=["analysis"])
     async def analyze(
@@ -239,20 +267,14 @@ def create_app() -> FastAPI:
         session: AsyncSession = Depends(get_session),
     ) -> AnalyzeResponse:
         detections = pipeline.detect(request.text)
-        risk = risk_engine.assess(
+        classification = classifier.classify(
+            request.text,
             detections,
-            RiskContext(
-                data_location=request.data_location,
-                access_scope=request.access_scope,
-                retention_days=request.retention_days,
-                encrypted_at_rest=request.encrypted_at_rest,
-                purpose_defined=request.purpose_defined,
-                exposure=request.exposure,
-                framework=request.framework,
-            ),
+            {"organization_id": principal.organization_id},
         )
+        risk = risk_engine.assess(detections, RiskContext())
         governance = _governance(request.text, request)
-        payload = _analysis_payload(detections, risk, governance)
+        payload = _analysis_payload(detections, classification, risk, governance)
         analysis_id = None
         if settings.environment != "test":
             await _tenant_session(session, principal.organization_id)
@@ -264,15 +286,21 @@ def create_app() -> FastAPI:
             organization_id=principal.organization_id,
             detections=[
                 DetectionResponse(
-                    type=detection.pii_type.value,
-                    start=detection.start,
-                    end=detection.end,
-                    confidence=detection.confidence,
-                    detector=detection.detector,
-                    redacted_value=_redact(detection.value),
+                    type=d.pii_type.value,
+                    start=d.start,
+                    end=d.end,
+                    confidence=d.confidence,
+                    detector=d.detector,
+                    redacted_value=_redact(d.value),
                 )
-                for detection in detections
+                for d in detections
             ],
+            classification=ClassificationResponse(
+                label=classification.label,
+                confidence=classification.confidence,
+                rationale=classification.rationale,
+                model_version=classification.model_version,
+            ),
             risk=RiskResponse(
                 score=risk.score,
                 level=risk.level.value,
@@ -283,11 +311,7 @@ def create_app() -> FastAPI:
             governance=governance,
         )
 
-    @app.post(
-        "/api/v1/analyze-document",
-        response_model=AnalyzeResponse,
-        tags=["analysis"],
-    )
+    @app.post("/api/v1/analyze-document", response_model=AnalyzeResponse, tags=["analysis"])
     async def analyze_document(
         file: UploadFile = File(...),
         principal: Principal = Depends(require_permission("analysis:write")),
@@ -298,10 +322,18 @@ def create_app() -> FastAPI:
             DocumentInput(file.filename or "upload", content, file.content_type)
         )
         detections = pipeline.detect(extracted.text)
+        classification = classifier.classify(
+            extracted.text,
+            detections,
+            {
+                "organization_id": principal.organization_id,
+                "document_type": extracted.document_type.value,
+            },
+        )
         risk = risk_engine.assess(detections, RiskContext())
         request = AnalyzeRequest(text=extracted.text)
         governance = _governance(extracted.text, request)
-        payload = _analysis_payload(detections, risk, governance)
+        payload = _analysis_payload(detections, classification, risk, governance)
         payload["document"] = {
             "filename": extracted.filename,
             "document_type": extracted.document_type.value,
@@ -312,30 +344,28 @@ def create_app() -> FastAPI:
         if settings.environment != "test":
             await _tenant_session(session, principal.organization_id)
             analysis_id = str(
-                (
-                    await _persist_analysis(
-                        session,
-                        principal,
-                        "document",
-                        extracted.filename,
-                        payload,
-                    )
-                ).id
+                (await _persist_analysis(session, principal, "document", extracted.filename, payload)).id
             )
         return AnalyzeResponse(
             analysis_id=analysis_id,
             organization_id=principal.organization_id,
             detections=[
                 DetectionResponse(
-                    type=detection.pii_type.value,
-                    start=detection.start,
-                    end=detection.end,
-                    confidence=detection.confidence,
-                    detector=detection.detector,
-                    redacted_value=_redact(detection.value),
+                    type=d.pii_type.value,
+                    start=d.start,
+                    end=d.end,
+                    confidence=d.confidence,
+                    detector=d.detector,
+                    redacted_value=_redact(d.value),
                 )
-                for detection in detections
+                for d in detections
             ],
+            classification=ClassificationResponse(
+                label=classification.label,
+                confidence=classification.confidence,
+                rationale=classification.rationale,
+                model_version=classification.model_version,
+            ),
             risk=RiskResponse(
                 score=risk.score,
                 level=risk.level.value,
@@ -360,8 +390,7 @@ def create_app() -> FastAPI:
         row = (
             await session.execute(
                 select(Analysis).where(
-                    Analysis.id == aid,
-                    Analysis.organization_id == UUID(principal.organization_id),
+                    Analysis.id == aid, Analysis.organization_id == UUID(principal.organization_id)
                 )
             )
         ).scalar_one_or_none()
@@ -373,6 +402,44 @@ def create_app() -> FastAPI:
             "status": row.status,
             "result": row.result,
         }
+
+    @app.get("/api/v1/findings", response_model=list[FindingResponse], tags=["findings"])
+    async def list_findings(
+        principal: Principal = Depends(require_permission("finding:read")),
+        session: AsyncSession = Depends(get_session),
+        pii_type: str | None = Query(default=None, max_length=80),
+        status: str | None = Query(default=None, max_length=40),
+        limit: int = Query(default=50, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+    ) -> list[FindingResponse]:
+        await _tenant_session(session, principal.organization_id)
+        query = select(Finding).where(Finding.organization_id == UUID(principal.organization_id))
+        if pii_type:
+            query = query.where(Finding.pii_type == pii_type)
+        if status:
+            query = query.where(Finding.status == status)
+        rows = (
+            (await session.execute(query.order_by(Finding.created_at.desc(), Finding.id.desc()).offset(offset).limit(limit)))
+            .scalars()
+            .all()
+        )
+        return [
+            FindingResponse(
+                id=str(r.id),
+                analysis_id=str(r.analysis_id),
+                pii_type=r.pii_type,
+                start_offset=r.start_offset,
+                end_offset=r.end_offset,
+                confidence=r.confidence,
+                detector=r.detector,
+                classification_label=r.classification_label,
+                classification_confidence=r.classification_confidence,
+                status=r.status,
+                owner_id=r.owner_id,
+                evidence=r.evidence,
+            )
+            for r in rows
+        ]
 
     @app.post("/api/v1/pias", response_model=PIAResponse, tags=["governance"])
     async def create_pia(
@@ -394,7 +461,7 @@ def create_app() -> FastAPI:
         session.add(
             AuditEvent(
                 organization_id=UUID(principal.organization_id),
-                actor_id=None,
+                actor_id=principal.subject,
                 action="PIA_CREATED",
                 object_type="pia",
                 object_id=str(row.id),
@@ -408,18 +475,10 @@ def create_app() -> FastAPI:
         )
         await session.commit()
         return PIAResponse(
-            id=str(row.id),
-            organization_id=principal.organization_id,
-            project_name=row.project_name,
-            status=row.status,
-            version=row.version,
+            id=str(row.id), organization_id=principal.organization_id, project_name=row.project_name, status=row.status, version=row.version
         )
 
-    @app.post(
-        "/api/v1/pias/{pia_id}/transition",
-        response_model=PIAResponse,
-        tags=["governance"],
-    )
+    @app.post("/api/v1/pias/{pia_id}/transition", response_model=PIAResponse, tags=["governance"])
     async def transition_pia(
         pia_id: str,
         request: PIATransitionRequest,
@@ -428,80 +487,27 @@ def create_app() -> FastAPI:
     ):
         await _tenant_session(session, principal.organization_id)
         try:
-            pid = UUID(pia_id)
-            target = PIAStatus(request.target)
+            pid, target = UUID(pia_id), PIAStatus(request.target)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Invalid PIA id or status") from exc
-        row = (
-            await session.execute(
-                select(PIARecord).where(
-                    PIARecord.id == pid,
-                    PIARecord.organization_id == UUID(principal.organization_id),
-                )
-            )
-        ).scalar_one_or_none()
+        row = (await session.execute(select(PIARecord).where(PIARecord.id == pid, PIARecord.organization_id == UUID(principal.organization_id)))).scalar_one_or_none()
         if row is None:
             raise HTTPException(status_code=404, detail="PIA not found")
-        pia = PIA(
-            pia_id=str(row.id),
-            organization_id=principal.organization_id,
-            project_name=row.project_name,
-            owner_id=row.owner_id,
-            status=PIAStatus(row.status),
-            version=row.version,
-            metadata=row.payload,
-        )
+        pia = PIA(pia_id=str(row.id), organization_id=principal.organization_id, project_name=row.project_name, owner_id=row.owner_id, status=PIAStatus(row.status), version=row.version, metadata=row.payload)
         try:
-            updated, entry = PIAWorkflow().transition(
-                pia, target, principal.subject, request.reason
-            )
+            updated, entry = PIAWorkflow().transition(pia, target, principal.subject, request.reason)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         payload = dict(row.payload)
         history = list(payload.get("history", []))
-        history.append(
-            {
-                "version": entry.version,
-                "from_status": entry.from_status.value if entry.from_status else None,
-                "to_status": entry.to_status.value,
-                "actor_id": entry.actor_id,
-                "timestamp": entry.timestamp,
-                "reason": entry.reason,
-            }
-        )
+        history.append({"version": entry.version, "from_status": entry.from_status.value if entry.from_status else None, "to_status": entry.to_status.value, "actor_id": entry.actor_id, "timestamp": entry.timestamp, "reason": entry.reason})
         payload["history"] = history
-        row.status = updated.status.value
-        row.version = updated.version
-        row.payload = payload
-        session.add(
-            AuditEvent(
-                organization_id=UUID(principal.organization_id),
-                actor_id=None,
-                action="PIA_TRANSITIONED",
-                object_type="pia",
-                object_id=str(row.id),
-                previous_state={"status": pia.status.value},
-                new_state={"status": row.status, "version": row.version},
-                request_id=None,
-                ip_address=None,
-                result="SUCCESS",
-                occurred_at=datetime.now(timezone.utc),
-            )
-        )
+        row.status, row.version, row.payload = updated.status.value, updated.version, payload
+        session.add(AuditEvent(organization_id=UUID(principal.organization_id), actor_id=principal.subject, action="PIA_TRANSITIONED", object_type="pia", object_id=str(row.id), previous_state={"status": pia.status.value}, new_state={"status": row.status, "version": row.version}, request_id=None, ip_address=None, result="SUCCESS", occurred_at=datetime.now(timezone.utc)))
         await session.commit()
-        return PIAResponse(
-            id=str(row.id),
-            organization_id=principal.organization_id,
-            project_name=row.project_name,
-            status=row.status,
-            version=row.version,
-        )
+        return PIAResponse(id=str(row.id), organization_id=principal.organization_id, project_name=row.project_name, status=row.status, version=row.version)
 
-    @app.post(
-        "/api/v1/remediations",
-        response_model=RemediationResponse,
-        tags=["governance"],
-    )
+    @app.post("/api/v1/remediations", response_model=RemediationResponse, tags=["governance"])
     async def create_remediation(
         request: RemediationRequest,
         principal: Principal = Depends(require_permission("analysis:write")),
@@ -514,14 +520,7 @@ def create_app() -> FastAPI:
                 analysis_id = UUID(request.analysis_id)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail="Invalid analysis_id") from exc
-            exists = (
-                await session.execute(
-                    select(Analysis.id).where(
-                        Analysis.id == analysis_id,
-                        Analysis.organization_id == UUID(principal.organization_id),
-                    )
-                )
-            ).scalar_one_or_none()
+            exists = (await session.execute(select(Analysis.id).where(Analysis.id == analysis_id, Analysis.organization_id == UUID(principal.organization_id)))).scalar_one_or_none()
             if exists is None:
                 raise HTTPException(status_code=404, detail="Analysis not found")
         row = RemediationItem(
@@ -532,6 +531,7 @@ def create_app() -> FastAPI:
             priority=request.priority.upper(),
             owner_id=request.owner_id or principal.subject,
             status="OPEN",
+            sla_hours=request.sla_hours,
             evidence={},
         )
         session.add(row)
@@ -539,12 +539,12 @@ def create_app() -> FastAPI:
         session.add(
             AuditEvent(
                 organization_id=UUID(principal.organization_id),
-                actor_id=None,
+                actor_id=principal.subject,
                 action="REMEDIATION_CREATED",
                 object_type="remediation",
                 object_id=str(row.id),
                 previous_state=None,
-                new_state={"status": "OPEN", "priority": row.priority},
+                new_state={"status": "OPEN", "priority": row.priority, "sla_hours": row.sla_hours},
                 request_id=None,
                 ip_address=None,
                 result="SUCCESS",
@@ -557,8 +557,13 @@ def create_app() -> FastAPI:
             organization_id=principal.organization_id,
             status=row.status,
             priority=row.priority,
+            owner_id=row.owner_id,
+            due_at=row.due_at.isoformat() if row.due_at else None,
         )
 
+    app.include_router(auth_router)
+    app.include_router(document_router)
+    app.include_router(governance_router)
     return app
 
 

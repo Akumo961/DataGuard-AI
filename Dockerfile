@@ -17,6 +17,7 @@ COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 
 RUN python -m pip install --upgrade pip \
+    && pip install --upgrade 'setuptools>=78.1.1' 'wheel>=0.46.2' 'jaraco.context>=6.1.0' 'msgpack>=1.2.1' \
     && pip install '.[ocr,ner]' \
     && pip download --no-deps --dest /tmp 'https://github.com/explosion/spacy-models/releases/download/xx_ent_wiki_sm-3.8.0/xx_ent_wiki_sm-3.8.0-py3-none-any.whl' \
     && echo '6f3c4b853852ea9e9d2dc76cc950dddb10a7e4c42d813308caefe6c5e8be2f0a  /tmp/xx_ent_wiki_sm-3.8.0-py3-none-any.whl' | sha256sum -c - \

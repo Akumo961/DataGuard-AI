@@ -20,8 +20,9 @@ class ComplianceFinding:
 class ComplianceEngine:
     """Evaluates configured controls; it does not determine legal compliance."""
 
-    def __init__(self, rules: list[ComplianceRule]) -> None:
+    def __init__(self, rules: list[ComplianceRule], framework: str = "unknown") -> None:
         self.rules = tuple(rules)
+        self.framework = framework
 
     def evaluate(self, evidence: Mapping[str, bool]) -> list[ComplianceFinding]:
         findings: list[ComplianceFinding] = []
@@ -42,7 +43,7 @@ class ComplianceEngine:
             findings.append(
                 ComplianceFinding(
                     rule.rule_id,
-                    rule.version,
+                    self.framework,
                     status,
                     rule.severity.value,
                     reason,

@@ -25,11 +25,13 @@ services:
       retries: 10
 
   api:
+    image: dataguard-api:ci
     build: .
     environment:
       DATAGUARD_ENVIRONMENT: ${DATAGUARD_ENVIRONMENT:-development}
       DATAGUARD_DATABASE_URL: ${DATAGUARD_DATABASE_URL:-postgresql+psycopg://dataguard:${POSTGRES_PASSWORD}@postgres:5432/dataguard}
       DATAGUARD_REDIS_URL: ${DATAGUARD_REDIS_URL:-redis://redis:6379/0}
+      DATAGUARD_DOCUMENT_ENCRYPTION_KEY: ${DATAGUARD_DOCUMENT_ENCRYPTION_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
       DATAGUARD_NER_MODEL: ${DATAGUARD_NER_MODEL:-xx_ent_wiki_sm}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
       DATAGUARD_JWT_SECRET: ${DATAGUARD_JWT_SECRET:?set DATAGUARD_JWT_SECRET}
@@ -42,6 +44,26 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  document-worker:
+    image: dataguard-api:ci
+    build: .
+    command: ["python", "-m", "dataguard.jobs.document_worker"]
+    environment:
+      DATAGUARD_ENVIRONMENT: ${DATAGUARD_ENVIRONMENT:-development}
+      DATAGUARD_DATABASE_URL: ${DATAGUARD_DATABASE_URL:-postgresql+psycopg://dataguard:${POSTGRES_PASSWORD}@postgres:5432/dataguard}
+      DATAGUARD_REDIS_URL: ${DATAGUARD_REDIS_URL:-redis://redis:6379/0}
+      DATAGUARD_DOCUMENT_ENCRYPTION_KEY: ${DATAGUARD_DOCUMENT_ENCRYPTION_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+      DATAGUARD_NER_MODEL: ${DATAGUARD_NER_MODEL:-xx_ent_wiki_sm}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+      DATAGUARD_JWT_SECRET: ${DATAGUARD_JWT_SECRET:?set DATAGUARD_JWT_SECRET}
+      DATAGUARD_WORKER_CONSUMER: ${DATAGUARD_WORKER_CONSUMER:-document-worker-1}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:

@@ -1,0 +1,46 @@
+name: DataGuard Tenant Isolation E2E
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tenant-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      POSTGRES_PASSWORD: dataguard-ci-password
+      SECRET_KEY: ci-secret-key-with-more-than-32-characters
+      DATAGUARD_JWT_SECRET: ci-jwt-secret-with-more-than-32-characters
+      DATAGUARD_ENVIRONMENT: development
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start DataGuard
+        run: docker compose up -d --build
+      - name: Wait for API
+        run: |
+          for i in {1..60}; do
+            curl --fail --silent http://127.0.0.1:8000/health/ready && exit 0
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      - name: Seed two tenants
+        run: |
+          docker compose exec -T postgres psql -U dataguard -d dataguard <<'SQL'
+          INSERT INTO organizations (id, slug, name, active, classification_policy)
+          VALUES
+            ('00000000-0000-0000-0000-000000000042', 'tenant-a', 'Tenant A', true, '{"public_max":[],"internal_max":["ORGANIZATION"],"confidential_max":["PERSON","EMAIL","PHONE","ADDRESS","IP_ADDRESS","EMPLOYEE_ID","CUSTOMER_ID"],"restricted_max":["DATE_OF_BIRTH","GOVERNMENT_ID","PASSPORT","DRIVER_LICENSE","TAX_ID","FINANCIAL_INFORMATION","BANK_ACCOUNT","HEALTH_INFORMATION","LOCATION","OTHER_SENSITIVE_INFORMATION"],"highly_restricted_max":["CREDIT_CARD","SOCIAL_INSURANCE_NUMBER","HEALTH_INSURANCE_ID","BIOMETRIC_DATA"]}'::jsonb),
+            ('00000000-0000-0000-0000-000000000043', 'tenant-b', 'Tenant B', true, '{"public_max":[],"internal_max":["ORGANIZATION"],"confidential_max":["PERSON","EMAIL","PHONE","ADDRESS","IP_ADDRESS","EMPLOYEE_ID","CUSTOMER_ID"],"restricted_max":["DATE_OF_BIRTH","GOVERNMENT_ID","PASSPORT","DRIVER_LICENSE","TAX_ID","FINANCIAL_INFORMATION","BANK_ACCOUNT","HEALTH_INFORMATION","LOCATION","OTHER_SENSITIVE_INFORMATION"],"highly_restricted_max":["CREDIT_CARD","SOCIAL_INSURANCE_NUMBER","HEALTH_INSURANCE_ID","BIOMETRIC_DATA"]}'::jsonb)
+          ON CONFLICT (id) DO NOTHING;
+          SQL
+      - name: Execute tenant matrix
+        run: bash scripts/tenant_isolation_e2e.sh
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v

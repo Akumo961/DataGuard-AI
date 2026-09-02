@@ -1,0 +1,75 @@
+name: DataGuard Supply Chain Security
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sbom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate filesystem SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom.cyclonedx.json
+      - name: Upload filesystem SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: dataguard-sbom-filesystem
+          path: sbom.cyclonedx.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Generate Python dependency SBOM
+        run: |
+          python -m pip install --upgrade pip cyclonedx-bom
+          python -m pip install -e ".[dev,ocr]"
+          cyclonedx-py environment --output-format json --output-file sbom.cyclonedx.python.json
+      - name: Upload Python dependency SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: dataguard-sbom-python
+          path: sbom.cyclonedx.python.json
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      POSTGRES_PASSWORD: dataguard-ci-password
+      SECRET_KEY: ci-secret-key-with-more-than-32-characters
+      DATAGUARD_JWT_SECRET: ci-jwt-secret-with-more-than-32-characters
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker compose build api
+      - name: Scan image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: dataguard-api:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          version: v0.74.0
+          skip-files: "**/pip/_vendor/bom.cdx.json"

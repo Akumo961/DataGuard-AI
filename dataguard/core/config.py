@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     allowed_hosts: list[str] = ["localhost", "127.0.0.1", "testserver"]
     database_url: str = "postgresql+psycopg://dataguard:dataguard@localhost:5432/dataguard"
     redis_url: str = "redis://localhost:6379/0"
+    clamav_url: str | None = None
     max_upload_bytes: int = Field(default=50 * 1024 * 1024, ge=1_048_576, le=100 * 1024 * 1024)
     raw_document_retention_days: int = Field(default=7, ge=1, le=3650)
     audit_retention_days: int = Field(default=2555, ge=30, le=36500)
@@ -66,6 +67,13 @@ class Settings(BaseSettings):
             raise ValueError("OIDC endpoints must use HTTPS")
         return value
 
+    @field_validator("clamav_url")
+    @classmethod
+    def validate_clamav_url(cls, value: str | None) -> str | None:
+        if value is not None and not value.startswith("tcp://"):
+            raise ValueError("ClamAV endpoint must use tcp://")
+        return value
+
     def validate_production(self) -> Settings:
         if self.environment.lower() not in {"production", "prod"}:
             return self
@@ -80,6 +88,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "Production authentication requires OIDC issuer, JWKS URL, JWT issuer and audience"
             )
+        if not self.clamav_url:
+            raise ValueError("Production uploads require a configured ClamAV scanner")
         if any(origin.startswith("http://") for origin in self.allowed_origins):
             raise ValueError("Production CORS origins must use HTTPS")
         if any(

@@ -1,0 +1,15 @@
+{"id":"email-001","text":"Contact alice@example.com for support.","expected":["EMAIL"]}
+{"id":"phone-001","text":"Call +1 514-555-0123 today.","expected":["PHONE"]}
+{"id":"ip-001","text":"Source address was 192.0.2.10.","expected":["IP_ADDRESS"]}
+{"id":"card-001","text":"Test card 4111 1111 1111 1111 was used.","expected":["CREDIT_CARD"]}
+{"id":"sin-001","text":"SIN 123-456-789 is synthetic test data.","expected":["SOCIAL_INSURANCE_NUMBER"]}
+{"id":"dob-001","text":"Date of birth: 1988-04-12.","expected":["DATE_OF_BIRTH"]}
+{"id":"passport-001","text":"Passport AB1234567 is synthetic.","expected":["PASSPORT"]}
+{"id":"health-001","text":"Medical condition: synthetic migraine.","expected":["HEALTH_INFORMATION"]}
+{"id":"name-001","text":"Name: Alice Tremblay.","expected":["PERSON"]}
+{"id":"address-001","text":"Address: 123 Main Street, Montreal.","expected":["ADDRESS"]}
+{"id":"multi-001","text":"Name: Alice Tremblay; email alice@example.com; phone 514-555-0123.","expected":["PERSON","EMAIL","PHONE"]}
+{"id":"clean-001","text":"The quarterly revenue increased by 4 percent.","expected":[]}
+{"id":"clean-002","text":"The server completed its nightly backup successfully.","expected":[]}
+{"id":"health-002","text":"Diagnosis: synthetic hypertension.","expected":["HEALTH_INFORMATION"]}
+{"id":"address-002","text":"123 Main Street, Montreal QC H2X 1Y4.","expected":["ADDRESS"]}

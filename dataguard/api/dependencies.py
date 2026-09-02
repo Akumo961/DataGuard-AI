@@ -3,8 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
+from redis.asyncio import Redis
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from dataguard.database.models import Organization
+from dataguard.database.session import engine
+from dataguard.security.audit_context import set_classification_policy
 from dataguard.security.auth import decode_access_token
 from dataguard.security.policy import AuthorizationPolicy, Role, TenantContext
 
@@ -14,6 +20,8 @@ class Principal:
     subject: str
     organization_id: str
     roles: tuple[str, ...]
+    jti: str
+    expires_at: str
 
     def tenant_context(self) -> TenantContext:
         return TenantContext(
@@ -21,7 +29,9 @@ class Principal:
         )
 
 
-def get_principal(authorization: str | None = Header(default=None)) -> Principal:
+async def get_principal(
+    request: Request, authorization: str | None = Header(default=None)
+) -> Principal:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Bearer token required"
@@ -29,6 +39,23 @@ def get_principal(authorization: str | None = Header(default=None)) -> Principal
     token = authorization[7:].strip()
     try:
         principal = decode_access_token(token)
+        redis: Redis | None = getattr(request.app.state, "redis", None)
+        if (
+            principal.jti
+            and redis is not None
+            and await redis.exists(f"dataguard:revoked:{principal.jti}")
+        ):
+            raise ValueError("Token revoked")
+        async with AsyncSession(engine) as session:
+            organization = (
+                await session.execute(
+                    select(Organization.classification_policy).where(
+                        Organization.id == principal.organization_id,
+                        Organization.active.is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+            set_classification_policy(organization)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid access token"
@@ -37,6 +64,8 @@ def get_principal(authorization: str | None = Header(default=None)) -> Principal
         subject=principal.subject_id,
         organization_id=principal.organization_id,
         roles=tuple(sorted(role.value for role in principal.roles)),
+        jti=principal.jti,
+        expires_at=principal.expires_at.isoformat(),
     )
 
 

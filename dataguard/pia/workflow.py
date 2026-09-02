@@ -24,6 +24,8 @@ class PIAWorkflow:
             raise ValueError(f"invalid PIA transition: {pia.status} -> {target}")
         if not actor_id:
             raise ValueError("actor_id is required")
+        if target == PIAStatus.APPROVED and len(reason.strip()) < 10:
+            raise ValueError("PIA approval requires a documented rationale")
         updated = replace(pia, status=target, version=pia.version + 1)
         history = PIAHistoryEntry(
             pia_id=pia.pia_id,
@@ -32,6 +34,6 @@ class PIAWorkflow:
             to_status=target,
             actor_id=actor_id,
             timestamp=datetime.now(timezone.utc).isoformat(),
-            reason=reason,
+            reason=reason.strip(),
         )
         return updated, history
