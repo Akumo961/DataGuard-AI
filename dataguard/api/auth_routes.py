@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from jwt import InvalidTokenError
 from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 from sqlalchemy import select, text
@@ -46,7 +47,6 @@ def _require_development() -> None:
 
 
 async def _set_tenant_context(session: AsyncSession, organization_id) -> None:
-    """Bind the current transaction to the tenant before touching RLS-protected rows."""
     await session.execute(
         text("SELECT set_config('dataguard.organization_id', :org, true)"),
         {"org": str(organization_id)},
@@ -97,7 +97,6 @@ async def login(request: LoginRequest, session: AsyncSession = Depends(get_sessi
     ).scalar_one_or_none()
     if organization is None:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
     await _set_tenant_context(session, organization.id)
     row = (
         await session.execute(
@@ -142,17 +141,11 @@ async def login(request: LoginRequest, session: AsyncSession = Depends(get_sessi
 async def oidc_login(
     request: OIDCLoginRequest, session: AsyncSession = Depends(get_session)
 ) -> dict:
-    """Validate an external OIDC ID token and provision/link a local tenant user.
-
-    The IdP must issue an `org`/`org_id`/`organization_id` claim containing the
-    existing DataGuard organization UUID. Roles are allow-listed by the Role enum.
-    """
     try:
         identity = decode_oidc_identity(request.id_token)
         organization_id = UUID(identity.organization_id)
     except (InvalidTokenError, ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=401, detail="Invalid OIDC identity") from exc
-
     organization = (
         await session.execute(
             select(Organization).where(
@@ -164,7 +157,6 @@ async def oidc_login(
     if organization is None:
         raise HTTPException(status_code=403, detail="OIDC tenant is not provisioned")
     await _set_tenant_context(session, str(organization.id))
-
     user = (
         await session.execute(
             select(User).where(
@@ -196,7 +188,6 @@ async def oidc_login(
             user.external_subject = identity.subject
         session.add(user)
         await session.flush()
-
     if not user.active:
         raise HTTPException(status_code=403, detail="User is inactive")
     existing_roles = (
