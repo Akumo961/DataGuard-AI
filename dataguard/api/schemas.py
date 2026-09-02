@@ -128,5 +128,19 @@ class RemediationTransitionRequest(BaseModel):
     verification_note: str | None = Field(default=None, max_length=2000)
 
 
+class ClassificationPolicyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    public_max: list[str] = Field(default_factory=list, max_length=100)
+    internal_max: list[str] = Field(default_factory=list, max_length=100)
+    confidential_max: list[str] = Field(default_factory=list, max_length=100)
+    restricted_max: list[str] = Field(default_factory=list, max_length=100)
+    highly_restricted_max: list[str] = Field(default_factory=list, max_length=100)
+    version: str = Field(default="1", min_length=1, max_length=64)
+
+
+class ClassificationPolicyResponse(ClassificationPolicyRequest):
+    organization_id: str
+
+
 class ErrorResponse(BaseModel):
     detail: str
