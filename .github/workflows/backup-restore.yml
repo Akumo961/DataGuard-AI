@@ -30,7 +30,7 @@ jobs:
           docker compose logs postgres
           exit 1
       - name: Run migrations
-        run: docker compose run --rm api alembic upgrade head
+        run: docker compose run --build --rm api alembic upgrade head
       - name: Seed restoration evidence
         run: docker compose exec -T postgres psql -U dataguard -d dataguard -c "INSERT INTO organizations (id, slug, name, active) VALUES ('00000000-0000-0000-0000-000000000042', 'backup-check', 'Backup Check', true) ON CONFLICT (id) DO NOTHING;"
       - name: Exercise backup and restore
