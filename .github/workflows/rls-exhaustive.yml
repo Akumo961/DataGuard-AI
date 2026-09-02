@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 15
     env:
       POSTGRES_PASSWORD: dataguard-ci-password
+      SECRET_KEY: ci-secret-key-with-more-than-32-characters
+      DATAGUARD_JWT_SECRET: ci-jwt-secret-with-more-than-32-characters
     steps:
       - uses: actions/checkout@v4
       - name: Start PostgreSQL
@@ -36,35 +38,29 @@ jobs:
           DECLARE
             missing text;
           BEGIN
-            SELECT string_agg(t.table_name, ', ' ORDER BY t.table_name)
+            SELECT string_agg(c.relname, ', ' ORDER BY c.relname)
             INTO missing
-            FROM information_schema.columns t
-            JOIN pg_class c ON c.relname = t.table_name
+            FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
-            WHERE t.table_schema = 'public'
-              AND t.column_name = 'organization_id'
-              AND c.relkind = 'r'
+            WHERE c.relkind = 'r'
+              AND EXISTS (
+                SELECT 1 FROM information_schema.columns col
+                WHERE col.table_schema = 'public'
+                  AND col.table_name = c.relname
+                  AND col.column_name = 'organization_id'
+              )
               AND (
                 c.relrowsecurity IS NOT TRUE
                 OR c.relforcerowsecurity IS NOT TRUE
                 OR NOT EXISTS (
-                  SELECT 1
-                  FROM pg_policies p
-                  WHERE p.schemaname = 'public'
-                    AND p.tablename = t.table_name
+                  SELECT 1 FROM pg_policies p
+                  WHERE p.schemaname = 'public' AND p.tablename = c.relname
                 )
               );
-
             IF missing IS NOT NULL THEN
               RAISE EXCEPTION 'Tenant-scoped tables without enforced RLS/policy: %', missing;
             END IF;
           END $$;
-
-          SELECT table_name
-          FROM information_schema.columns
-          WHERE table_schema = 'public' AND column_name = 'organization_id'
-          GROUP BY table_name
-          ORDER BY table_name;
           SQL
       - name: Cleanup
         if: always()
