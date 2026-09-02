@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -145,6 +145,13 @@ class RemediationItem(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Ba
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     verified_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     evidence: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+@event.listens_for(RemediationItem, "before_insert")
+def _set_remediation_due_at(mapper, connection, target: RemediationItem) -> None:
+    del mapper, connection
+    if target.due_at is None:
+        target.due_at = datetime.now(timezone.utc) + timedelta(hours=target.sla_hours)
 
 
 class SecurityEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
