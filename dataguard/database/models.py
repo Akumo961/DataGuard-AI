@@ -139,6 +139,10 @@ class RemediationItem(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Ba
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="OPEN")
     priority: Mapped[str] = mapped_column(String(32), nullable=False, default="MEDIUM")
     owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sla_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=168)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     evidence: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
