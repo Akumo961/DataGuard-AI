@@ -28,9 +28,15 @@ class MetricsRegistry:
             "# TYPE dataguard_requests_total counter",
         ]
         for (name, labels), value in sorted(items):
-            rendered = ",".join(f'{key}="{val.replace(chr(34), chr(92) + chr(34))}"' for key, val in labels)
+            rendered = ",".join(
+                f'{key}="{val.replace(chr(34), chr(92) + chr(34))}"' for key, val in labels
+            )
             metric_name = name
-            lines.append(f"{metric_name}{{{rendered}}} {value}" if rendered else f"{metric_name} {value}")
+            lines.append(
+                f"{metric_name}{{{rendered}}} {value}"
+                if rendered
+                else f"{metric_name} {value}"
+            )
         return "\n".join(lines) + "\n"
 
 
