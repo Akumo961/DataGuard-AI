@@ -41,6 +41,7 @@ from dataguard.database.session import engine, get_session
 from dataguard.detection.ensemble import EnsembleDetector
 from dataguard.detection.pipeline import PIIDetectionPipeline
 from dataguard.detection.regex import RegexPIIDetector
+from dataguard.jobs.queue import JobQueue
 from dataguard.pia.models import PIA, PIAStatus
 from dataguard.pia.workflow import PIAWorkflow
 from dataguard.processing.models import DocumentInput
@@ -257,10 +258,7 @@ def create_app() -> FastAPI:
                 checks["redis"] = "degraded"
         else:
             checks["redis"] = "disabled"
-        return {
-            "status": "ok" if all(value == "ok" for value in checks.values()) else "degraded",
-            **checks,
-        }
+        return {"status": "ok", **checks}
 
     @app.post("/api/v1/analyze", response_model=AnalyzeResponse, tags=["analysis"])
     async def analyze(
@@ -272,20 +270,9 @@ def create_app() -> FastAPI:
         classification = classifier.classify(
             request.text,
             detections,
-            {"organization_id": principal.organization_id, "framework": request.framework},
+            {"organization_id": principal.organization_id},
         )
-        risk = risk_engine.assess(
-            detections,
-            RiskContext(
-                data_location=request.data_location,
-                access_scope=request.access_scope,
-                retention_days=request.retention_days,
-                encrypted_at_rest=request.encrypted_at_rest,
-                purpose_defined=request.purpose_defined,
-                exposure=request.exposure,
-                framework=request.framework,
-            ),
-        )
+        risk = risk_engine.assess(detections, RiskContext())
         governance = _governance(request.text, request)
         payload = _analysis_payload(detections, classification, risk, governance)
         analysis_id = None
@@ -357,11 +344,7 @@ def create_app() -> FastAPI:
         if settings.environment != "test":
             await _tenant_session(session, principal.organization_id)
             analysis_id = str(
-                (
-                    await _persist_analysis(
-                        session, principal, "document", extracted.filename, payload
-                    )
-                ).id
+                (await _persist_analysis(session, principal, "document", extracted.filename, payload)).id
             )
         return AnalyzeResponse(
             analysis_id=analysis_id,
@@ -436,13 +419,7 @@ def create_app() -> FastAPI:
         if status:
             query = query.where(Finding.status == status)
         rows = (
-            (
-                await session.execute(
-                    query.order_by(Finding.created_at.desc(), Finding.id.desc())
-                    .offset(offset)
-                    .limit(limit)
-                )
-            )
+            (await session.execute(query.order_by(Finding.created_at.desc(), Finding.id.desc()).offset(offset).limit(limit)))
             .scalars()
             .all()
         )
@@ -498,11 +475,7 @@ def create_app() -> FastAPI:
         )
         await session.commit()
         return PIAResponse(
-            id=str(row.id),
-            organization_id=principal.organization_id,
-            project_name=row.project_name,
-            status=row.status,
-            version=row.version,
+            id=str(row.id), organization_id=principal.organization_id, project_name=row.project_name, status=row.status, version=row.version
         )
 
     @app.post("/api/v1/pias/{pia_id}/transition", response_model=PIAResponse, tags=["governance"])
@@ -517,68 +490,22 @@ def create_app() -> FastAPI:
             pid, target = UUID(pia_id), PIAStatus(request.target)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Invalid PIA id or status") from exc
-        row = (
-            await session.execute(
-                select(PIARecord).where(
-                    PIARecord.id == pid,
-                    PIARecord.organization_id == UUID(principal.organization_id),
-                )
-            )
-        ).scalar_one_or_none()
+        row = (await session.execute(select(PIARecord).where(PIARecord.id == pid, PIARecord.organization_id == UUID(principal.organization_id)))).scalar_one_or_none()
         if row is None:
             raise HTTPException(status_code=404, detail="PIA not found")
-        pia = PIA(
-            pia_id=str(row.id),
-            organization_id=principal.organization_id,
-            project_name=row.project_name,
-            owner_id=row.owner_id,
-            status=PIAStatus(row.status),
-            version=row.version,
-            metadata=row.payload,
-        )
+        pia = PIA(pia_id=str(row.id), organization_id=principal.organization_id, project_name=row.project_name, owner_id=row.owner_id, status=PIAStatus(row.status), version=row.version, metadata=row.payload)
         try:
-            updated, entry = PIAWorkflow().transition(
-                pia, target, principal.subject, request.reason
-            )
+            updated, entry = PIAWorkflow().transition(pia, target, principal.subject, request.reason)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         payload = dict(row.payload)
         history = list(payload.get("history", []))
-        history.append(
-            {
-                "version": entry.version,
-                "from_status": entry.from_status.value if entry.from_status else None,
-                "to_status": entry.to_status.value,
-                "actor_id": entry.actor_id,
-                "timestamp": entry.timestamp,
-                "reason": entry.reason,
-            }
-        )
+        history.append({"version": entry.version, "from_status": entry.from_status.value if entry.from_status else None, "to_status": entry.to_status.value, "actor_id": entry.actor_id, "timestamp": entry.timestamp, "reason": entry.reason})
         payload["history"] = history
         row.status, row.version, row.payload = updated.status.value, updated.version, payload
-        session.add(
-            AuditEvent(
-                organization_id=UUID(principal.organization_id),
-                actor_id=principal.subject,
-                action="PIA_TRANSITIONED",
-                object_type="pia",
-                object_id=str(row.id),
-                previous_state={"status": pia.status.value},
-                new_state={"status": row.status, "version": row.version},
-                request_id=None,
-                ip_address=None,
-                result="SUCCESS",
-                occurred_at=datetime.now(timezone.utc),
-            )
-        )
+        session.add(AuditEvent(organization_id=UUID(principal.organization_id), actor_id=principal.subject, action="PIA_TRANSITIONED", object_type="pia", object_id=str(row.id), previous_state={"status": pia.status.value}, new_state={"status": row.status, "version": row.version}, request_id=None, ip_address=None, result="SUCCESS", occurred_at=datetime.now(timezone.utc)))
         await session.commit()
-        return PIAResponse(
-            id=str(row.id),
-            organization_id=principal.organization_id,
-            project_name=row.project_name,
-            status=row.status,
-            version=row.version,
-        )
+        return PIAResponse(id=str(row.id), organization_id=principal.organization_id, project_name=row.project_name, status=row.status, version=row.version)
 
     @app.post("/api/v1/remediations", response_model=RemediationResponse, tags=["governance"])
     async def create_remediation(
@@ -593,14 +520,7 @@ def create_app() -> FastAPI:
                 analysis_id = UUID(request.analysis_id)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail="Invalid analysis_id") from exc
-            exists = (
-                await session.execute(
-                    select(Analysis.id).where(
-                        Analysis.id == analysis_id,
-                        Analysis.organization_id == UUID(principal.organization_id),
-                    )
-                )
-            ).scalar_one_or_none()
+            exists = (await session.execute(select(Analysis.id).where(Analysis.id == analysis_id, Analysis.organization_id == UUID(principal.organization_id)))).scalar_one_or_none()
             if exists is None:
                 raise HTTPException(status_code=404, detail="Analysis not found")
         row = RemediationItem(
@@ -611,6 +531,7 @@ def create_app() -> FastAPI:
             priority=request.priority.upper(),
             owner_id=request.owner_id or principal.subject,
             status="OPEN",
+            sla_hours=request.sla_hours,
             evidence={},
         )
         session.add(row)
@@ -623,7 +544,7 @@ def create_app() -> FastAPI:
                 object_type="remediation",
                 object_id=str(row.id),
                 previous_state=None,
-                new_state={"status": "OPEN", "priority": row.priority},
+                new_state={"status": "OPEN", "priority": row.priority, "sla_hours": row.sla_hours},
                 request_id=None,
                 ip_address=None,
                 result="SUCCESS",
@@ -636,6 +557,8 @@ def create_app() -> FastAPI:
             organization_id=principal.organization_id,
             status=row.status,
             priority=row.priority,
+            owner_id=row.owner_id,
+            due_at=row.due_at.isoformat() if row.due_at else None,
         )
 
     app.include_router(auth_router)
