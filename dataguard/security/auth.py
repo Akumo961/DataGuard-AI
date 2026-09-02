@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from uuid import uuid4
 
 import jwt
 from jwt import InvalidTokenError, PyJWKClient
@@ -17,6 +18,8 @@ class AuthenticatedPrincipal:
     subject_id: str
     organization_id: str
     roles: frozenset[Role]
+    jti: str
+    expires_at: datetime
 
     def tenant_context(self) -> TenantContext:
         return TenantContext(self.organization_id, self.subject_id, self.roles)
@@ -44,6 +47,7 @@ def create_access_token(
         "roles": [role.value for role in roles],
         "iat": now,
         "exp": now + timedelta(minutes=expires_minutes),
+        "jti": str(uuid4()),
     }
     return jwt.encode(payload, secret, algorithm="HS256")
 
@@ -65,7 +69,7 @@ def decode_access_token(token: str) -> AuthenticatedPrincipal:
             raise RuntimeError("OIDC JWKS endpoint is not configured")
         key = PyJWKClient(settings.oidc_jwks_url).get_signing_key_from_jwt(token).key
 
-    options = {"require": ["sub", "roles", "iat", "exp"]}
+    options = {"require": ["sub", "roles", "iat", "exp", "jti"]}
     decode_kwargs: dict[str, Any] = {"algorithms": [settings.jwt_algorithm], "options": options}
     if settings.jwt_issuer:
         decode_kwargs["issuer"] = settings.jwt_issuer
@@ -75,14 +79,24 @@ def decode_access_token(token: str) -> AuthenticatedPrincipal:
     subject = payload.get("sub")
     organization = payload.get("org") or payload.get("org_id")
     raw_roles = payload.get("roles")
+    jti = payload.get("jti")
+    expires = payload.get("exp")
     if (
         not isinstance(subject, str)
         or not isinstance(organization, str)
         or not isinstance(raw_roles, list)
+        or not isinstance(jti, str)
+        or not isinstance(expires, (int, float))
     ):
         raise InvalidTokenError("Invalid token claims")
     try:
         roles = frozenset(Role(value) for value in raw_roles)
     except ValueError as exc:
         raise InvalidTokenError("Invalid role claim") from exc
-    return AuthenticatedPrincipal(subject, organization, roles)
+    return AuthenticatedPrincipal(
+        subject,
+        organization,
+        roles,
+        jti,
+        datetime.fromtimestamp(expires, tz=timezone.utc),
+    )
