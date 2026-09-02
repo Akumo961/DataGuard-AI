@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from dataguard.api.dependencies import Principal, require_permission
+from dataguard.api.auth_routes import router as auth_router
+from dataguard.api.document_routes import router as document_router
 from dataguard.api.governance_routes import router as governance_router
 from dataguard.api.schemas import (
     AnalyzeRequest,
@@ -636,6 +638,8 @@ def create_app() -> FastAPI:
             priority=row.priority,
         )
 
+    app.include_router(auth_router)
+    app.include_router(document_router)
     app.include_router(governance_router)
     return app
 
