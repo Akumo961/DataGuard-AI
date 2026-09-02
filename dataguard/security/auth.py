@@ -26,6 +26,15 @@ class AuthenticatedPrincipal:
         return TenantContext(self.organization_id, self.subject_id, self.roles)
 
 
+@dataclass(frozen=True)
+class OIDCIdentity:
+    subject: str
+    email: str
+    display_name: str
+    organization_id: str
+    roles: frozenset[Role]
+
+
 @lru_cache(maxsize=8)
 def _jwks_client(url: str) -> PyJWKClient:
     return PyJWKClient(
@@ -63,6 +72,41 @@ def create_access_token(
         "jti": str(uuid4()),
     }
     return jwt.encode(payload, secret, algorithm="HS256")
+
+
+def _oidc_key_and_claims(token: str) -> dict[str, Any]:
+    settings = get_settings()
+    if not settings.oidc_jwks_url or not settings.oidc_issuer_url:
+        raise RuntimeError("OIDC issuer and JWKS endpoint are not configured")
+    key = _jwks_client(settings.oidc_jwks_url).get_signing_key_from_jwt(token).key
+    kwargs: dict[str, Any] = {
+        "algorithms": ["RS256", "ES256"],
+        "issuer": settings.oidc_issuer_url,
+        "options": {"require": ["sub", "iss", "iat", "exp"]},
+    }
+    if settings.jwt_audience:
+        kwargs["audience"] = settings.jwt_audience
+    return jwt.decode(token, key, **kwargs)
+
+
+def decode_oidc_identity(token: str) -> OIDCIdentity:
+    if not token or len(token) > 16_384:
+        raise InvalidTokenError("Invalid OIDC token")
+    payload = _oidc_key_and_claims(token)
+    subject = payload.get("sub")
+    email = payload.get("email")
+    organization = payload.get("org") or payload.get("org_id") or payload.get("organization_id")
+    display_name = payload.get("name") or payload.get("preferred_username") or email
+    raw_roles = payload.get("roles", [Role.ANALYST.value])
+    if not all(isinstance(v, str) for v in (subject, email, organization, display_name)):
+        raise InvalidTokenError("OIDC token is missing required identity claims")
+    if not isinstance(raw_roles, list):
+        raise InvalidTokenError("OIDC roles claim must be a list")
+    try:
+        roles = frozenset(Role(value) for value in raw_roles)
+    except ValueError as exc:
+        raise InvalidTokenError("OIDC token contains an unsupported role") from exc
+    return OIDCIdentity(subject, email.strip().lower(), display_name, organization, roles)
 
 
 def decode_access_token(token: str) -> AuthenticatedPrincipal:
