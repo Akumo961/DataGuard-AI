@@ -1,0 +1,71 @@
+name: DataGuard Exhaustive RLS Validation
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      POSTGRES_PASSWORD: dataguard-ci-password
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start PostgreSQL
+        run: docker compose up -d postgres
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            docker compose exec -T postgres pg_isready -U dataguard -d dataguard && exit 0
+            sleep 2
+          done
+          docker compose logs postgres
+          exit 1
+      - name: Apply migrations
+        run: docker compose run --build --rm api alembic upgrade head
+      - name: Validate every tenant-scoped table has enforced RLS
+        run: |
+          docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U dataguard -d dataguard <<'SQL'
+          DO $$
+          DECLARE
+            missing text;
+          BEGIN
+            SELECT string_agg(t.table_name, ', ' ORDER BY t.table_name)
+            INTO missing
+            FROM information_schema.columns t
+            JOIN pg_class c ON c.relname = t.table_name
+            JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+            WHERE t.table_schema = 'public'
+              AND t.column_name = 'organization_id'
+              AND c.relkind = 'r'
+              AND (
+                c.relrowsecurity IS NOT TRUE
+                OR c.relforcerowsecurity IS NOT TRUE
+                OR NOT EXISTS (
+                  SELECT 1
+                  FROM pg_policies p
+                  WHERE p.schemaname = 'public'
+                    AND p.tablename = t.table_name
+                )
+              );
+
+            IF missing IS NOT NULL THEN
+              RAISE EXCEPTION 'Tenant-scoped tables without enforced RLS/policy: %', missing;
+            END IF;
+          END $$;
+
+          SELECT table_name
+          FROM information_schema.columns
+          WHERE table_schema = 'public' AND column_name = 'organization_id'
+          GROUP BY table_name
+          ORDER BY table_name;
+          SQL
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v
