@@ -15,7 +15,7 @@ from dataguard.api.schemas import ClassificationPolicyRequest, ClassificationPol
 from dataguard.core.config import get_settings
 from dataguard.database.models import AuditEvent, Organization, User, UserRole
 from dataguard.database.session import get_session
-from dataguard.security.auth import create_access_token
+from dataguard.security.auth import create_access_token, decode_oidc_identity
 from dataguard.security.passwords import hash_password, verify_password
 from dataguard.security.policy import Role
 
@@ -34,6 +34,10 @@ class LoginRequest(BaseModel):
     organization_slug: str = Field(min_length=2, max_length=100)
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=1, max_length=1024)
+
+
+class OIDCLoginRequest(BaseModel):
+    id_token: str = Field(min_length=20, max_length=16_384)
 
 
 def _require_development() -> None:
@@ -129,6 +133,104 @@ async def login(request: LoginRequest, session: AsyncSession = Depends(get_sessi
     }
     token = create_access_token(
         subject_id=str(row.id), organization_id=str(row.organization_id), roles=roles
+    )
+    await session.commit()
+    return {"access_token": token, "token_type": "bearer", "expires_in": 900}
+
+
+@router.post("/oidc/login")
+async def oidc_login(
+    request: OIDCLoginRequest, session: AsyncSession = Depends(get_session)
+) -> dict:
+    """Validate an external OIDC ID token and provision/link a local tenant user.
+
+    The IdP must issue an `org`/`org_id`/`organization_id` claim containing the
+    existing DataGuard organization UUID. Roles are allow-listed by the Role enum.
+    """
+    try:
+        identity = decode_oidc_identity(request.id_token)
+        organization_id = UUID(identity.organization_id)
+    except (InvalidTokenError, ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid OIDC identity") from exc
+
+    organization = (
+        await session.execute(
+            select(Organization).where(
+                Organization.id == organization_id,
+                Organization.active.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+    if organization is None:
+        raise HTTPException(status_code=403, detail="OIDC tenant is not provisioned")
+    await _set_tenant_context(session, str(organization.id))
+
+    user = (
+        await session.execute(
+            select(User).where(
+                User.organization_id == organization.id,
+                User.external_subject == identity.subject,
+            )
+        )
+    ).scalar_one_or_none()
+    if user is None:
+        email_user = (
+            await session.execute(
+                select(User).where(
+                    User.organization_id == organization.id,
+                    User.email == identity.email,
+                )
+            )
+        ).scalar_one_or_none()
+        if email_user is not None and email_user.external_subject not in {None, identity.subject}:
+            raise HTTPException(status_code=409, detail="OIDC identity is already linked to another user")
+        user = email_user or User(
+            organization_id=organization.id,
+            external_subject=identity.subject,
+            email=identity.email,
+            password_hash=None,
+            display_name=identity.display_name[:255],
+            active=True,
+        )
+        if email_user is not None:
+            user.external_subject = identity.subject
+        session.add(user)
+        await session.flush()
+
+    if not user.active:
+        raise HTTPException(status_code=403, detail="User is inactive")
+    existing_roles = (
+        await session.execute(
+            select(UserRole).where(
+                UserRole.organization_id == organization.id,
+                UserRole.user_id == user.id,
+            )
+        )
+    ).scalars().all()
+    role_values = {Role(role.role) for role in existing_roles}
+    if not role_values:
+        role_values = set(identity.roles) or {Role.ANALYST}
+        session.add_all(
+            UserRole(organization_id=organization.id, user_id=user.id, role=role.value)
+            for role in role_values
+        )
+    token = create_access_token(
+        subject_id=str(user.id), organization_id=str(organization.id), roles=role_values
+    )
+    session.add(
+        AuditEvent(
+            organization_id=organization.id,
+            actor_id=str(user.id),
+            action="OIDC_LOGIN",
+            object_type="user",
+            object_id=str(user.id),
+            previous_state=None,
+            new_state={"external_subject": identity.subject, "provisioned": not bool(existing_roles)},
+            request_id=None,
+            ip_address=None,
+            result="SUCCESS",
+            occurred_at=datetime.now(timezone.utc),
+        )
     )
     await session.commit()
     return {"access_token": token, "token_type": "bearer", "expires_in": 900}
