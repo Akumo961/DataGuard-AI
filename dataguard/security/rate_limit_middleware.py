@@ -8,7 +8,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
 from dataguard.core.config import get_settings
+from dataguard.processing.validation import UnsafeDocumentError
 from dataguard.security.audit_context import AuditRequestContext, reset_context, set_context
+from dataguard.security.malware import MalwareScannerUnavailableError
 from dataguard.security.metrics import metrics
 from dataguard.security.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 
@@ -87,5 +89,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 status=str(response.status_code),
             )
             return response
+        except UnsafeDocumentError as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=400)
+        except MalwareScannerUnavailableError as exc:
+            metrics.inc("dataguard_security_events_total", event="malware_scanner_unavailable")
+            return JSONResponse({"detail": str(exc)}, status_code=503)
         finally:
             reset_context(token)
