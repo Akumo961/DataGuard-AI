@@ -35,7 +35,9 @@ async def get_principal(
     try:
         principal = decode_access_token(token)
         redis: Redis | None = getattr(request.app.state, "redis", None)
-        if redis is not None and await redis.exists(f"dataguard:revoked:{principal.jti}"):
+        if principal.jti and redis is not None and await redis.exists(
+            f"dataguard:revoked:{principal.jti}"
+        ):
             raise ValueError("Token revoked")
     except Exception as exc:
         raise HTTPException(
