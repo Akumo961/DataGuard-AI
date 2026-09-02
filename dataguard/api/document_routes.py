@@ -15,7 +15,8 @@ from dataguard.database.models import Analysis, DocumentArtifact
 from dataguard.database.session import get_session
 from dataguard.jobs.queue import JobQueue
 from dataguard.processing.models import DocumentInput
-from dataguard.processing.pipeline import DocumentProcessingPipeline
+from dataguard.processing.validation import DocumentValidator
+from dataguard.security.malware import ClamAVScanner, MalwareScannerUnavailableError
 from dataguard.security.document_crypto import encrypt_document
 
 router = APIRouter(prefix="/api/v1", tags=["analysis"])
@@ -48,12 +49,20 @@ async def enqueue_document_analysis(
     if len(content) > settings.max_upload_bytes:
         raise HTTPException(status_code=413, detail="Document exceeds configured size limit")
 
+    document = DocumentInput(filename, content, file.content_type)
     try:
-        DocumentProcessingPipeline().process(
-            DocumentInput(filename, content, file.content_type)
-        )
+        DocumentValidator(
+            max_bytes=settings.max_upload_bytes,
+            allowed_mime_types=set(settings.upload_allowed_mime_types),
+        ).validate(document)
+        if settings.clamav_url:
+            ClamAVScanner(settings.clamav_url).scan(content)
+        elif settings.environment.lower() in {"production", "prod"}:
+            raise MalwareScannerUnavailableError("Production upload scanning is not configured")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except MalwareScannerUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     redis: Redis | None = getattr(request.app.state, "redis", None)
     if redis is None:
