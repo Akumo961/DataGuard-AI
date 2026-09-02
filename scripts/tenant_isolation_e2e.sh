@@ -6,8 +6,9 @@ secret="${DATAGUARD_JWT_SECRET:-ci-jwt-secret-with-more-than-32-characters}"
 
 jwt() {
   local org="$1" sub="$2" role="$3"
-  docker compose exec -T api python -c 'import jwt; from datetime import datetime,timedelta,timezone; import os; n=datetime.now(timezone.utc); print(jwt.encode({"sub":os.environ["SUB"],"org":os.environ["ORG"],"roles":[os.environ["ROLE"]],"iat":n,"exp":n+timedelta(minutes=10),"jti":os.environ["SUB"]+"-e2e"}, os.environ["SECRET"], algorithm="HS256"))' \
-    -e "ORG=$org" -e "SUB=$sub" -e "ROLE=$role" -e "SECRET=$secret"
+  docker compose exec -T \
+    -e "ORG=$org" -e "SUB=$sub" -e "ROLE=$role" -e "SECRET=$secret" \
+    api python -c 'import jwt; from datetime import datetime,timedelta,timezone; import os; n=datetime.now(timezone.utc); print(jwt.encode({"sub":os.environ["SUB"],"org":os.environ["ORG"],"roles":[os.environ["ROLE"]],"iat":n,"exp":n+timedelta(minutes=10),"jti":os.environ["SUB"]+"-e2e"}, os.environ["SECRET"], algorithm="HS256"))'
 }
 
 A="$(jwt 00000000-0000-0000-0000-000000000042 tenant-a analyst)"
