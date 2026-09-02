@@ -84,6 +84,10 @@ class JobQueue:
             return
         await self.redis.xadd(
             self.stream,
-            {"job": json.dumps(asdict(JobRecord(**{**asdict(job), "attempt": job.attempt + 1})))},
+            {
+                "job": json.dumps(
+                    asdict(JobRecord(**{**asdict(job), "attempt": job.attempt + 1}))
+                )
+            },
         )
         await self.ack(group, message_id)
