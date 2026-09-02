@@ -7,10 +7,12 @@ set -euo pipefail
 backup_file="${1:-/tmp/dataguard-backup.dump}"
 service="${DATAGUARD_DB_SERVICE:-postgres}"
 
+# Always specify the database role: CI runners otherwise default to the OS user.
 docker compose exec -T "$service" pg_dump \
   --format=custom \
   --no-owner \
   --no-privileges \
+  --username=dataguard \
   --file=/tmp/dataguard-backup.dump \
   dataguard
 
@@ -27,6 +29,7 @@ docker compose exec -T "$service" pg_restore \
   --exit-on-error \
   --no-owner \
   --no-privileges \
+  --username=dataguard \
   --dbname=dataguard_restore_check \
   /tmp/dataguard-restore.dump
 
