@@ -5,7 +5,12 @@ from typing import Callable
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from redis.asyncio import Redis
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from dataguard.database.models import Organization
+from dataguard.database.session import engine
+from dataguard.security.audit_context import set_classification_policy
 from dataguard.security.auth import decode_access_token
 from dataguard.security.policy import AuthorizationPolicy, Role, TenantContext
 
@@ -39,6 +44,16 @@ async def get_principal(
             f"dataguard:revoked:{principal.jti}"
         ):
             raise ValueError("Token revoked")
+        async with AsyncSession(engine) as session:
+            organization = (
+                await session.execute(
+                    select(Organization.classification_policy).where(
+                        Organization.id == principal.organization_id,
+                        Organization.active.is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+            set_classification_policy(organization)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid access token"
