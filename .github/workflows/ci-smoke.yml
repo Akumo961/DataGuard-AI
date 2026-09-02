@@ -7,14 +7,33 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: hardening/bank-grade-platform
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Format Python sources and commit deterministic formatting
+        if: github.event_name == 'push' && github.ref == 'refs/heads/hardening/bank-grade-platform'
+        run: |
+          python -m pip install --disable-pip-version-check "ruff==0.16.5"
+          python -m ruff format dataguard
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "Already formatted"
+          else
+            git add dataguard
+            git commit -m "style: apply Ruff formatting [skip ci]"
+            git push origin HEAD:hardening/bank-grade-platform
+          fi
       - name: Verify runner and repository
         run: |
           set -euo pipefail
