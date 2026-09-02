@@ -42,6 +42,10 @@ jobs:
   container:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      POSTGRES_PASSWORD: dataguard-ci-password
+      SECRET_KEY: ci-secret-key-with-more-than-32-characters
+      DATAGUARD_JWT_SECRET: ci-jwt-secret-with-more-than-32-characters
     steps:
       - uses: actions/checkout@v4
       - name: Build image
