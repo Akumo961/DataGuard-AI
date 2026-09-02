@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 import jwt
 
 from dataguard.security.auth import create_access_token, decode_access_token
