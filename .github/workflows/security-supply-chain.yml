@@ -71,5 +71,5 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
           severity: CRITICAL,HIGH
-          skip-files: /usr/local/lib/python3.11/site-packages/pip/_vendor/bom.cdx.json
           version: v0.74.0
+          skip-files: "**/pip/_vendor/bom.cdx.json"
