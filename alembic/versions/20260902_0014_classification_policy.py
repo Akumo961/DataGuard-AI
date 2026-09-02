@@ -1,5 +1,7 @@
 """Add organization-scoped classification policy storage."""
 
+import json
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -49,7 +51,10 @@ def upgrade() -> None:
         sa.Column("classification_policy", postgresql.JSONB(), nullable=True),
     )
     op.execute(
-        sa.text("UPDATE organizations SET classification_policy = :policy WHERE classification_policy IS NULL").bindparams(policy=_DEFAULT)
+        sa.text(
+            "UPDATE organizations SET classification_policy = CAST(:policy AS jsonb) "
+            "WHERE classification_policy IS NULL"
+        ).bindparams(policy=json.dumps(_DEFAULT))
     )
     op.alter_column("organizations", "classification_policy", nullable=False)
 
