@@ -1,0 +1,53 @@
+name: DataGuard one-shot route integration
+
+on:
+  push:
+    branches: ["hardening/bank-grade-platform"]
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor == 'Akumo961'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hardening/bank-grade-platform
+      - name: Integrate auth and durable document routers
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path("dataguard/api/app.py")
+          s = p.read_text()
+          marker = "from dataguard.api.document_routes import router as document_router"
+          if marker not in s:
+              s = s.replace(
+                  "from dataguard.api.dependencies import Principal, require_permission\n",
+                  "from dataguard.api.dependencies import Principal, require_permission\n"
+                  "from dataguard.api.auth_routes import router as auth_router\n"
+                  "from dataguard.api.document_routes import router as document_router\n",
+                  1,
+              )
+              needle = "    app.include_router(governance_router)\n"
+              replacement = (
+                  "    app.include_router(auth_router)\n"
+                  "    app.include_router(document_router)\n"
+                  "    app.include_router(governance_router)\n"
+              )
+              if needle not in s:
+                  raise SystemExit("governance router registration point not found")
+              s = s.replace(needle, replacement, 1)
+              p.write_text(s)
+          Path(".github/workflows/one-shot-route-integration.yml").unlink()
+      - name: Commit integration and remove bootstrap workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dataguard/api/app.py .github/workflows/one-shot-route-integration.yml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "fix: register auth and durable document routers"
+          git push origin HEAD:hardening/bank-grade-platform
