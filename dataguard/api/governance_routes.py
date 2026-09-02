@@ -4,16 +4,11 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dataguard.api.dependencies import Principal, require_permission
-from dataguard.api.schemas import (
-    FindingResponse,
-    PIAResponse,
-    RemediationResponse,
-    RemediationTransitionRequest,
-)
+from dataguard.api.schemas import FindingResponse, PIAResponse, RemediationResponse, RemediationTransitionRequest
 from dataguard.database.models import AuditEvent, Finding, PIARecord, RemediationItem
 from dataguard.database.session import get_session
 
@@ -27,20 +22,17 @@ def _uuid(value: str, detail: str) -> UUID:
         raise HTTPException(status_code=400, detail=detail) from exc
 
 
+async def _set_tenant(session: AsyncSession, organization_id: str) -> None:
+    await session.execute(text("SELECT set_config('dataguard.organization_id', :org, true)"), {"org": organization_id})
+
+
 def _finding(row: Finding) -> FindingResponse:
     return FindingResponse(
-        id=str(row.id),
-        analysis_id=str(row.analysis_id),
-        pii_type=row.pii_type,
-        start_offset=row.start_offset,
-        end_offset=row.end_offset,
-        confidence=row.confidence,
-        detector=row.detector,
-        classification_label=row.classification_label,
-        classification_confidence=row.classification_confidence,
-        status=row.status,
-        owner_id=row.owner_id,
-        evidence=row.evidence,
+        id=str(row.id), analysis_id=str(row.analysis_id), pii_type=row.pii_type,
+        start_offset=row.start_offset, end_offset=row.end_offset, confidence=row.confidence,
+        detector=row.detector, classification_label=row.classification_label,
+        classification_confidence=row.classification_confidence, status=row.status,
+        owner_id=row.owner_id, evidence=row.evidence,
     )
 
 
@@ -52,44 +44,24 @@ async def update_finding(
     principal: Principal = Depends(require_permission("finding:manage")),
     session: AsyncSession = Depends(get_session),
 ) -> FindingResponse:
-    await session.execute(
-        __import__("sqlalchemy").text("SELECT set_config('dataguard.organization_id', :org, true)"),
-        {"org": principal.organization_id},
-    )
+    await _set_tenant(session, principal.organization_id)
     fid = _uuid(finding_id, "Invalid finding id")
-    allowed = {"OPEN", "IN_REVIEW", "RESOLVED", "FALSE_POSITIVE", "ACCEPTED"}
     normalized = status.upper()
-    if normalized not in allowed:
+    if normalized not in {"OPEN", "IN_REVIEW", "RESOLVED", "FALSE_POSITIVE", "ACCEPTED"}:
         raise HTTPException(status_code=400, detail="Invalid finding status")
-    row = (
-        await session.execute(
-            select(Finding).where(
-                Finding.id == fid,
-                Finding.organization_id == UUID(principal.organization_id),
-            )
-        )
-    ).scalar_one_or_none()
+    row = (await session.execute(select(Finding).where(Finding.id == fid, Finding.organization_id == UUID(principal.organization_id)))).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Finding not found")
     previous = {"status": row.status, "owner_id": row.owner_id}
     row.status = normalized
     if owner_id is not None:
         row.owner_id = owner_id
-    session.add(
-        AuditEvent(
-            organization_id=UUID(principal.organization_id),
-            actor_id=principal.subject,
-            action="FINDING_UPDATED",
-            object_type="finding",
-            object_id=str(row.id),
-            previous_state=previous,
-            new_state={"status": row.status, "owner_id": row.owner_id},
-            request_id=None,
-            ip_address=None,
-            result="SUCCESS",
-            occurred_at=datetime.now(timezone.utc),
-        )
-    )
+    session.add(AuditEvent(
+        organization_id=UUID(principal.organization_id), actor_id=principal.subject,
+        action="FINDING_UPDATED", object_type="finding", object_id=str(row.id),
+        previous_state=previous, new_state={"status": row.status, "owner_id": row.owner_id},
+        request_id=None, ip_address=None, result="SUCCESS", occurred_at=datetime.now(timezone.utc),
+    ))
     await session.commit()
     return _finding(row)
 
@@ -102,9 +74,7 @@ async def list_pias(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> list[PIAResponse]:
-    from sqlalchemy import text
-
-    await session.execute(text("SELECT set_config('dataguard.organization_id', :org, true)"), {"org": principal.organization_id})
+    await _set_tenant(session, principal.organization_id)
     query = select(PIARecord).where(PIARecord.organization_id == UUID(principal.organization_id))
     if status:
         query = query.where(PIARecord.status == status.upper())
@@ -118,9 +88,7 @@ async def get_pia(
     principal: Principal = Depends(require_permission("pia:manage")),
     session: AsyncSession = Depends(get_session),
 ) -> PIAResponse:
-    from sqlalchemy import text
-
-    await session.execute(text("SELECT set_config('dataguard.organization_id', :org, true)"), {"org": principal.organization_id})
+    await _set_tenant(session, principal.organization_id)
     pid = _uuid(pia_id, "Invalid PIA id")
     row = (await session.execute(select(PIARecord).where(PIARecord.id == pid, PIARecord.organization_id == UUID(principal.organization_id)))).scalar_one_or_none()
     if row is None:
@@ -136,9 +104,7 @@ async def list_remediations(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> list[RemediationResponse]:
-    from sqlalchemy import text
-
-    await session.execute(text("SELECT set_config('dataguard.organization_id', :org, true)"), {"org": principal.organization_id})
+    await _set_tenant(session, principal.organization_id)
     query = select(RemediationItem).where(RemediationItem.organization_id == UUID(principal.organization_id))
     if status:
         query = query.where(RemediationItem.status == status.upper())
@@ -153,38 +119,26 @@ async def transition_remediation(
     principal: Principal = Depends(require_permission("finding:manage")),
     session: AsyncSession = Depends(get_session),
 ) -> RemediationResponse:
-    from sqlalchemy import text
-
-    await session.execute(text("SELECT set_config('dataguard.organization_id', :org, true)"), {"org": principal.organization_id})
+    await _set_tenant(session, principal.organization_id)
     rid = _uuid(remediation_id, "Invalid remediation id")
-    allowed = {"OPEN", "IN_PROGRESS", "BLOCKED", "RESOLVED", "CLOSED"}
     target = request.status.upper()
-    if target not in allowed:
+    if target not in {"OPEN", "IN_PROGRESS", "BLOCKED", "RESOLVED", "CLOSED"}:
         raise HTTPException(status_code=400, detail="Invalid remediation status")
+    forbidden = {"raw_value", "value", "pii", "secret", "token", "password"}
+    if forbidden.intersection(request.evidence):
+        raise HTTPException(status_code=400, detail="Evidence must not contain raw sensitive values")
     row = (await session.execute(select(RemediationItem).where(RemediationItem.id == rid, RemediationItem.organization_id == UUID(principal.organization_id)))).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Remediation not found")
     previous = {"status": row.status, "evidence": row.evidence}
     row.status = target
     if request.evidence:
-        forbidden = {"raw_value", "value", "pii", "secret", "token", "password"}
-        if forbidden.intersection(request.evidence):
-            raise HTTPException(status_code=400, detail="Evidence must not contain raw sensitive values")
         row.evidence = {**row.evidence, **request.evidence}
-    session.add(
-        AuditEvent(
-            organization_id=UUID(principal.organization_id),
-            actor_id=principal.subject,
-            action="REMEDIATION_TRANSITIONED",
-            object_type="remediation",
-            object_id=str(row.id),
-            previous_state=previous,
-            new_state={"status": row.status, "evidence": row.evidence},
-            request_id=None,
-            ip_address=None,
-            result="SUCCESS",
-            occurred_at=datetime.now(timezone.utc),
-        )
-    )
+    session.add(AuditEvent(
+        organization_id=UUID(principal.organization_id), actor_id=principal.subject,
+        action="REMEDIATION_TRANSITIONED", object_type="remediation", object_id=str(row.id),
+        previous_state=previous, new_state={"status": row.status, "evidence": row.evidence},
+        request_id=None, ip_address=None, result="SUCCESS", occurred_at=datetime.now(timezone.utc),
+    ))
     await session.commit()
     return RemediationResponse(id=str(row.id), organization_id=principal.organization_id, status=row.status, priority=row.priority)
