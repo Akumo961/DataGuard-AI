@@ -5,9 +5,9 @@ import os
 from datetime import datetime, timezone
 
 from redis.asyncio import Redis
-from sqlalchemy import delete
+from sqlalchemy import delete, select, text
 
-from dataguard.database.models import DocumentArtifact
+from dataguard.database.models import DocumentArtifact, Organization
 from dataguard.database.session import SessionFactory
 from dataguard.jobs.document_handler import handle_document_analysis
 from dataguard.jobs.worker import AnalysisWorker
@@ -17,13 +17,19 @@ async def _retention_loop() -> None:
     while True:
         try:
             async with SessionFactory() as session:
-                result = await session.execute(
-                    delete(DocumentArtifact).where(
-                        DocumentArtifact.expires_at <= datetime.now(timezone.utc)
+                organizations = (await session.execute(select(Organization.id))).scalars().all()
+                for organization_id in organizations:
+                    await session.execute(
+                        text("SELECT set_config('dataguard.organization_id', :org, true)"),
+                        {"org": str(organization_id)},
                     )
-                )
-                if result.rowcount:
-                    await session.commit()
+                    await session.execute(
+                        delete(DocumentArtifact).where(
+                            DocumentArtifact.expires_at <= datetime.now(timezone.utc),
+                            DocumentArtifact.organization_id == organization_id,
+                        )
+                    )
+                await session.commit()
         except Exception:
             # A retention outage must not stop analysis processing; observability should alert operators.
             pass
