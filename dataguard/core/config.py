@@ -93,8 +93,7 @@ class Settings(BaseSettings):
         if any(origin.startswith("http://") for origin in self.allowed_origins):
             raise ValueError("Production CORS origins must use HTTPS")
         if any(
-            host in {"localhost", "127.0.0.1", "[::1]", "testserver"}
-            for host in self.allowed_hosts
+            host in {"localhost", "127.0.0.1", "[::1]", "testserver"} for host in self.allowed_hosts
         ):
             raise ValueError("Production trusted hosts must not contain local/test hosts")
         if any(host in self.database_url.lower() for host in ("localhost", "127.0.0.1")):
