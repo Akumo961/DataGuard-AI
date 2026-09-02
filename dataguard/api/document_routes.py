@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
 from redis.asyncio import Redis
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dataguard.api.dependencies import Principal, require_permission
@@ -13,6 +14,7 @@ from dataguard.core.config import get_settings
 from dataguard.database.models import Analysis, DocumentArtifact
 from dataguard.database.session import get_session
 from dataguard.jobs.queue import JobQueue
+from dataguard.processing.models import DocumentInput
 from dataguard.processing.pipeline import DocumentProcessingPipeline
 from dataguard.security.document_crypto import encrypt_document
 
@@ -31,6 +33,7 @@ class DocumentJobResponse(BaseModel):
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def enqueue_document_analysis(
+    request: Request,
     file: UploadFile = File(...),
     principal: Principal = Depends(require_permission("analysis:write")),
     session: AsyncSession = Depends(get_session),
@@ -45,22 +48,22 @@ async def enqueue_document_analysis(
     if len(content) > settings.max_upload_bytes:
         raise HTTPException(status_code=413, detail="Document exceeds configured size limit")
 
-    # Validate the document before persisting it, without retaining extracted plaintext.
     try:
-        DocumentProcessingPipeline().process(content=content)  # type: ignore[call-arg]
-    except TypeError:
-        # Pipeline API is currently positional; keep validation explicit below.
-        pass
+        DocumentProcessingPipeline().process(
+            DocumentInput(filename, content, file.content_type)
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    redis: Redis | None = getattr(request.app.state, "redis", None)
+    if redis is None:
+        raise HTTPException(status_code=503, detail="Document queue unavailable")
 
     analysis_id = uuid4()
     artifact_id = uuid4()
     now = datetime.now(timezone.utc)
     await session.execute(
-        __import__("sqlalchemy").text(
-            "SELECT set_config('dataguard.organization_id', :org, true)"
-        ),
+        text("SELECT set_config('dataguard.organization_id', :org, true)"),
         {"org": principal.organization_id},
     )
     analysis = Analysis(
@@ -86,15 +89,20 @@ async def enqueue_document_analysis(
     session.add_all([analysis, artifact])
     await session.commit()
 
-    redis: Redis | None = None
     try:
-        # Reuse the application's Redis connection in the API process when available.
-        from fastapi import Request
-        raise RuntimeError("Request-bound Redis dependency is required")
-    except RuntimeError:
-        pass
+        await JobQueue(redis).enqueue(
+            "document_analysis",
+            principal.organization_id,
+            {"artifact_id": str(artifact_id), "subject_id": principal.subject},
+        )
+    except Exception as exc:
+        analysis.status = "FAILED"
+        analysis.result = {"error": "Document queue submission failed"}
+        await session.commit()
+        raise HTTPException(status_code=503, detail="Document queue unavailable") from exc
 
-    raise HTTPException(
-        status_code=503,
-        detail="Document queue is not configured for this API process",
+    return DocumentJobResponse(
+        analysis_id=str(analysis_id),
+        organization_id=principal.organization_id,
+        status="QUEUED",
     )
