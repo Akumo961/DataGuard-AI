@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +17,7 @@ from dataguard.api.schemas import (
 )
 from dataguard.database.models import Analysis, AuditEvent, Finding, PIARecord, RemediationItem
 from dataguard.database.session import get_session
+from dataguard.security.metrics import metrics
 
 router = APIRouter()
 
@@ -49,6 +51,27 @@ def _finding(row: Finding) -> FindingResponse:
         owner_id=row.owner_id,
         evidence=row.evidence,
     )
+
+
+def _remediation(row: RemediationItem, organization_id: str) -> RemediationResponse:
+    return RemediationResponse(
+        id=str(row.id),
+        organization_id=organization_id,
+        status=row.status,
+        priority=row.priority,
+        owner_id=row.owner_id,
+        due_at=row.due_at.isoformat() if row.due_at else None,
+        verified_at=row.verified_at.isoformat() if row.verified_at else None,
+        verified_by=row.verified_by,
+    )
+
+
+@router.get("/metrics", response_class=PlainTextResponse, tags=["observability"])
+async def metrics_endpoint(
+    principal: Principal = Depends(require_permission("security:manage")),
+) -> PlainTextResponse:
+    del principal
+    return PlainTextResponse(metrics.render(), media_type="text/plain; version=0.0.4")
 
 
 @router.patch("/api/v1/findings/{finding_id}", response_model=FindingResponse, tags=["findings"])
@@ -184,14 +207,10 @@ async def list_pias(
     if status:
         query = query.where(PIARecord.status == status.upper())
     rows = (
-        (
-            await session.execute(
-                query.order_by(PIARecord.created_at.desc()).offset(offset).limit(limit)
-            )
+        await session.execute(
+            query.order_by(PIARecord.created_at.desc()).offset(offset).limit(limit)
         )
-        .scalars()
-        .all()
-    )
+    ).scalars().all()
     return [
         PIAResponse(
             id=str(r.id),
@@ -283,23 +302,11 @@ async def list_remediations(
     if status:
         query = query.where(RemediationItem.status == status.upper())
     rows = (
-        (
-            await session.execute(
-                query.order_by(RemediationItem.created_at.desc()).offset(offset).limit(limit)
-            )
+        await session.execute(
+            query.order_by(RemediationItem.created_at.desc()).offset(offset).limit(limit)
         )
-        .scalars()
-        .all()
-    )
-    return [
-        RemediationResponse(
-            id=str(r.id),
-            organization_id=principal.organization_id,
-            status=r.status,
-            priority=r.priority,
-        )
-        for r in rows
-    ]
+    ).scalars().all()
+    return [_remediation(r, principal.organization_id) for r in rows]
 
 
 @router.patch(
@@ -316,13 +323,19 @@ async def transition_remediation(
     await _set_tenant(session, principal.organization_id)
     rid = _uuid(remediation_id, "Invalid remediation id")
     target = request.status.upper()
-    if target not in {"OPEN", "IN_PROGRESS", "BLOCKED", "RESOLVED", "CLOSED"}:
+    if target not in {"OPEN", "IN_PROGRESS", "BLOCKED", "RESOLVED", "VERIFIED", "CLOSED"}:
         raise HTTPException(status_code=400, detail="Invalid remediation status")
+    if target == "VERIFIED" and not set(principal.roles).intersection(
+        {"privacy_officer", "security_admin", "org_admin"}
+    ):
+        raise HTTPException(status_code=403, detail="Verification requires an authorized reviewer")
     forbidden = {"raw_value", "value", "pii", "secret", "token", "password"}
     if forbidden.intersection(request.evidence):
         raise HTTPException(
             status_code=400, detail="Evidence must not contain raw sensitive values"
         )
+    if target == "VERIFIED" and not request.verification_note:
+        raise HTTPException(status_code=400, detail="Verification note is required")
     row = (
         await session.execute(
             select(RemediationItem).where(
@@ -333,32 +346,44 @@ async def transition_remediation(
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Remediation not found")
-    previous = {"status": row.status, "evidence": row.evidence}
+    now = datetime.now(timezone.utc)
+    if row.due_at is None:
+        row.due_at = now + timedelta(hours=row.sla_hours)
+    previous = {
+        "status": row.status,
+        "evidence": row.evidence,
+        "verified_at": row.verified_at.isoformat() if row.verified_at else None,
+    }
     row.status = target
     if request.evidence:
         row.evidence = {**row.evidence, **request.evidence}
+    if request.verification_note:
+        row.evidence = {**row.evidence, "verification_note": request.verification_note}
+    if target == "VERIFIED":
+        row.verified_at = now
+        row.verified_by = principal.subject
     session.add(
         AuditEvent(
             organization_id=UUID(principal.organization_id),
             actor_id=principal.subject,
-            action="REMEDIATION_TRANSITIONED",
+            action="REMEDIATION_VERIFIED" if target == "VERIFIED" else "REMEDIATION_TRANSITIONED",
             object_type="remediation",
             object_id=str(row.id),
             previous_state=previous,
-            new_state={"status": row.status, "evidence": row.evidence},
+            new_state={
+                "status": row.status,
+                "evidence": row.evidence,
+                "verified_at": row.verified_at.isoformat() if row.verified_at else None,
+                "verified_by": row.verified_by,
+            },
             request_id=None,
             ip_address=None,
             result="SUCCESS",
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=now,
         )
     )
     await session.commit()
-    return RemediationResponse(
-        id=str(row.id),
-        organization_id=principal.organization_id,
-        status=row.status,
-        priority=row.priority,
-    )
+    return _remediation(row, principal.organization_id)
 
 
 @router.delete("/api/v1/remediations/{remediation_id}", status_code=204, tags=["governance"])
