@@ -12,14 +12,17 @@ from dataguard.processing.extractors import (
 )
 from dataguard.processing.models import DocumentInput, ExtractedDocument
 from dataguard.processing.validation import DocumentValidator
+from dataguard.security.malware import ClamAVScanner, MalwareScannerUnavailableError
 
 
 class DocumentProcessingPipeline:
     def __init__(self, validator: DocumentValidator | None = None) -> None:
+        settings = get_settings()
         self.validator = validator or DocumentValidator(
-            max_bytes=get_settings().max_upload_bytes,
-            allowed_mime_types=set(get_settings().upload_allowed_mime_types),
+            max_bytes=settings.max_upload_bytes,
+            allowed_mime_types=set(settings.upload_allowed_mime_types),
         )
+        self.scanner = ClamAVScanner(settings.clamav_url) if settings.clamav_url else None
         self._extractors = {
             ".pdf": PDFExtractor(),
             ".docx": DOCXExtractor(),
@@ -36,6 +39,10 @@ class DocumentProcessingPipeline:
 
     def process(self, document: DocumentInput) -> ExtractedDocument:
         kind = self.validator.validate(document)
+        if self.scanner is not None:
+            self.scanner.scan(document.content)
+        elif get_settings().environment.lower() in {"production", "prod"}:
+            raise MalwareScannerUnavailableError("Production upload scanning is not configured")
         suffix = document.filename.rsplit(".", 1)[-1].lower()
         extractor = self._extractors.get(f".{suffix}")
         if extractor is None:
