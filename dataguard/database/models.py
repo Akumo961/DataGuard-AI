@@ -75,6 +75,26 @@ class Analysis(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     result: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
+class Finding(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
+    __tablename__ = "findings"
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    analysis_id: Mapped[UUID] = mapped_column(
+        ForeignKey("analyses.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    pii_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    start_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    confidence: Mapped[float] = mapped_column(nullable=False)
+    detector: Mapped[str] = mapped_column(String(80), nullable=False)
+    classification_label: Mapped[str] = mapped_column(String(40), nullable=False)
+    classification_confidence: Mapped[float] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="OPEN")
+    owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    evidence: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
 class PIARecord(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     __tablename__ = "pia_records"
     organization_id: Mapped[UUID] = mapped_column(
