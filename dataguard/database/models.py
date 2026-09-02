@@ -29,6 +29,7 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    classification_policy: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     users: Mapped[list[User]] = relationship(back_populates="organization")
 
 
