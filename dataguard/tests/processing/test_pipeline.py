@@ -24,6 +24,11 @@ def test_json_extraction() -> None:
     assert "alice@example.ca" in result.text
 
 
+def test_malformed_json_is_rejected_as_unsafe_document() -> None:
+    with pytest.raises(UnsafeDocumentError, match="JSON document is malformed"):
+        DocumentProcessingPipeline().process(DocumentInput("data.json", b'{"email": '))
+
+
 def test_csv_extraction() -> None:
     result = DocumentProcessingPipeline().process(
         DocumentInput("data.csv", b"name,email\nAlice,alice@example.ca\n")
