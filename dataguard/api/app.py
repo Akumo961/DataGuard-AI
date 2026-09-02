@@ -80,7 +80,7 @@ def _governance(text_value: str, request: AnalyzeRequest) -> GovernanceResponse 
         "access_scope_defined": request.access_scope != "unknown",
         "data_location_defined": request.data_location != "unknown",
     }
-    findings = ComplianceEngine(rules).evaluate(evidence)
+    findings = ComplianceEngine(rules, framework=request.framework).evaluate(evidence)
     return GovernanceResponse(
         framework=request.framework,
         findings=[
