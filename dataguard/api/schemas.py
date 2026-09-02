@@ -53,6 +53,21 @@ class AnalyzeResponse(BaseModel):
     governance: GovernanceResponse | None = None
 
 
+class FindingResponse(BaseModel):
+    id: str
+    analysis_id: str
+    pii_type: str
+    start_offset: int
+    end_offset: int
+    confidence: float
+    detector: str
+    classification_label: str
+    classification_confidence: float
+    status: str
+    owner_id: str | None
+    evidence: dict[str, object]
+
+
 class PIARequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     project_name: str = Field(min_length=1, max_length=255)
