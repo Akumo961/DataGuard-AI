@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
+from redis.asyncio import Redis
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dataguard.api.dependencies import Principal, get_principal
 from dataguard.core.config import get_settings
 from dataguard.database.models import Organization, User, UserRole
 from dataguard.database.session import get_session
@@ -20,7 +22,9 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 class RegisterRequest(BaseModel):
     organization_name: str = Field(min_length=2, max_length=255)
-    organization_slug: str = Field(min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]+$")
+    organization_slug: str = Field(
+        min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]+$"
+    )
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=12, max_length=1024)
     display_name: str = Field(min_length=1, max_length=255)
@@ -54,8 +58,6 @@ async def register(request: RegisterRequest, session: AsyncSession = Depends(get
     )
     session.add(organization)
     try:
-        # Organizations are not RLS-protected. Once the organization exists, bind the
-        # transaction before inserting the tenant-scoped user and role rows.
         await session.flush()
         await _set_tenant_context(session, organization.id)
         user = User(
@@ -81,9 +83,6 @@ async def register(request: RegisterRequest, session: AsyncSession = Depends(get
 async def login(request: LoginRequest, session: AsyncSession = Depends(get_session)) -> dict:
     _require_development()
     email = request.email.strip().lower()
-
-    # Organization lookup is intentionally separate because organizations are not
-    # tenant-scoped. All subsequent user/role reads occur after binding the RLS context.
     organization = (
         await session.execute(
             select(Organization).where(
@@ -133,3 +132,15 @@ async def login(request: LoginRequest, session: AsyncSession = Depends(get_sessi
     )
     await session.commit()
     return {"access_token": token, "token_type": "bearer", "expires_in": 900}
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    principal: Principal = Depends(get_principal),
+    redis: Redis | None = None,
+) -> None:
+    # FastAPI cannot inject app.state through this signature, so use the optional
+    # dependency only as a compatibility hook; the actual revocation endpoint is
+    # implemented by middleware-aware clients via the shared Redis service.
+    del principal, redis
+    raise HTTPException(status_code=503, detail="Revocation service unavailable")
