@@ -3,6 +3,7 @@
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Any
 from uuid import uuid4
 
@@ -23,6 +24,18 @@ class AuthenticatedPrincipal:
 
     def tenant_context(self) -> TenantContext:
         return TenantContext(self.organization_id, self.subject_id, self.roles)
+
+
+@lru_cache(maxsize=8)
+def _jwks_client(url: str) -> PyJWKClient:
+    return PyJWKClient(
+        url,
+        cache_jwk_set=True,
+        cache_keys=True,
+        max_cached_keys=32,
+        lifespan=300,
+        timeout=5,
+    )
 
 
 def create_access_token(
@@ -67,7 +80,7 @@ def decode_access_token(token: str) -> AuthenticatedPrincipal:
     else:
         if not settings.oidc_jwks_url:
             raise RuntimeError("OIDC JWKS endpoint is not configured")
-        key = PyJWKClient(settings.oidc_jwks_url).get_signing_key_from_jwt(token).key
+        key = _jwks_client(settings.oidc_jwks_url).get_signing_key_from_jwt(token).key
 
     options = {"require": ["sub", "roles", "iat", "exp"]}
     decode_kwargs: dict[str, Any] = {"algorithms": [settings.jwt_algorithm], "options": options}
