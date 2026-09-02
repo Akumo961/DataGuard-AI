@@ -8,7 +8,7 @@ from sqlalchemy import select, text
 from dataguard.api.app import _analysis_payload, _governance
 from dataguard.api.schemas import AnalyzeRequest
 from dataguard.classification.rules import RuleBasedClassifier
-from dataguard.database.models import Analysis, AuditEvent, DocumentArtifact, Finding
+from dataguard.database.models import Analysis, AuditEvent, DocumentArtifact, Finding, Organization
 from dataguard.database.session import SessionFactory
 from dataguard.detection.ensemble import EnsembleDetector
 from dataguard.detection.pipeline import PIIDetectionPipeline
@@ -17,6 +17,7 @@ from dataguard.jobs.queue import JobRecord
 from dataguard.processing.models import DocumentInput
 from dataguard.processing.pipeline import DocumentProcessingPipeline
 from dataguard.risk.engine import RiskContext, RiskEngine
+from dataguard.security.audit_context import set_classification_policy
 from dataguard.security.document_crypto import decrypt_document
 
 
@@ -33,6 +34,12 @@ async def handle_document_analysis(job: JobRecord) -> None:
             text("SELECT set_config('dataguard.organization_id', :org, true)"),
             {"org": job.tenant_id},
         )
+        organization = (
+            await session.execute(select(Organization).where(Organization.id == UUID(job.tenant_id)))
+        ).scalar_one_or_none()
+        if organization is None or not organization.active:
+            raise ValueError("Document tenant is not active")
+        set_classification_policy(organization.classification_policy)
         artifact = (
             await session.execute(
                 select(DocumentArtifact).where(
