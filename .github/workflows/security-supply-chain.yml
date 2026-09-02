@@ -41,7 +41,7 @@ jobs:
 
   container:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       POSTGRES_PASSWORD: dataguard-ci-password
       SECRET_KEY: ci-secret-key-with-more-than-32-characters
