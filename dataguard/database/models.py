@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Uuid, event, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, String, Uuid, event, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,9 +32,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    roles: Mapped[list[UserRole]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
+    roles: Mapped[list[UserRole]] = relationship(back_populates="user", cascade="all, delete-orphan")
     organization: Mapped[Organization] = relationship(back_populates="users")
     __table_args__ = (Index("uq_users_org_email", "organization_id", "email", unique=True),)
 
@@ -73,6 +71,7 @@ class Analysis(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     source_type: Mapped[str] = mapped_column(String(64), nullable=False)
     source_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     result: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    __table_args__ = (Index("uq_analysis_org_id", "organization_id", "id", unique=True),)
 
 
 class Finding(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
@@ -80,9 +79,7 @@ class Finding(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     organization_id: Mapped[UUID] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    analysis_id: Mapped[UUID] = mapped_column(
-        ForeignKey("analyses.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    analysis_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
     pii_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     start_offset: Mapped[int] = mapped_column(Integer, nullable=False)
     end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -93,6 +90,14 @@ class Finding(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="OPEN")
     owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     evidence: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["analysis_id", "organization_id"],
+            ["analyses.id", "analyses.organization_id"],
+            ondelete="CASCADE",
+            name="fk_findings_analysis_tenant",
+        ),
+    )
 
 
 class PIARecord(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
@@ -157,11 +162,9 @@ class AuditEvent(UUIDPrimaryKeyMixin, TenantScopedMixin, Base):
 
 @event.listens_for(AuditEvent, "before_insert")
 def _hash_audit_event(mapper, connection, target: AuditEvent) -> None:
-    """Serialize every audit insert into an organization-scoped hash chain."""
     del mapper
     if target.id is None:
         target.id = uuid4()
-
     org = str(target.organization_id)
     if connection.dialect.name == "postgresql":
         connection.execute(text("SELECT pg_advisory_xact_lock(hashtext(:org))"), {"org": org})
