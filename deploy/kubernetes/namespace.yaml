@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dataguard
+  labels:
+    app.kubernetes.io/name: dataguard
+    app.kubernetes.io/part-of: dataguard
