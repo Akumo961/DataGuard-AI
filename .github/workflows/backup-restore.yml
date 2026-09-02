@@ -1,0 +1,40 @@
+name: DataGuard Backup Restore
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      POSTGRES_PASSWORD: dataguard-ci-password
+      SECRET_KEY: ci-secret-key-with-more-than-32-characters
+      DATAGUARD_JWT_SECRET: ci-jwt-secret-with-more-than-32-characters
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start database
+        run: docker compose up -d postgres
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            docker compose exec -T postgres pg_isready -U dataguard -d dataguard && exit 0
+            sleep 2
+          done
+          docker compose logs postgres
+          exit 1
+      - name: Run migrations
+        run: docker compose run --rm api alembic upgrade head
+      - name: Seed restoration evidence
+        run: docker compose exec -T postgres psql -U dataguard -d dataguard -c "INSERT INTO organizations (id, slug, name, active) VALUES ('00000000-0000-0000-0000-000000000042', 'backup-check', 'Backup Check', true) ON CONFLICT (id) DO NOTHING;"
+      - name: Exercise backup and restore
+        run: bash scripts/backup_restore_check.sh
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v
