@@ -15,11 +15,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: azure/setup-kubectl@v4
-        with:
-          version: latest
-      - name: Validate manifests
-        run: kubectl apply --dry-run=client --validate=true -f deploy/kubernetes/
+      - name: Validate Kubernetes manifests offline
+        run: |
+          docker run --rm \
+            -v "$PWD:/work:ro" \
+            ghcr.io/yannh/kubeconform:v0.7.0 \
+            -strict -summary /work/deploy/kubernetes/*.yaml
       - name: Validate rollout and rollback metadata
         run: |
           test "$(grep -c 'revisionHistoryLimit:' deploy/kubernetes/api-deployment.yaml)" -ge 1
