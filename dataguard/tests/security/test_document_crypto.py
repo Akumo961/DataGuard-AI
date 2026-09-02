@@ -1,6 +1,7 @@
 import base64
 
 import pytest
+from cryptography.exceptions import InvalidTag
 
 from dataguard.security.document_crypto import decrypt_document, encrypt_document
 
@@ -24,5 +25,5 @@ def test_document_encryption_rejects_tampering(monkeypatch):
     )
     blob = bytearray(encrypt_document(b"secret document", associated_data=b"tenant:artifact"))
     blob[-1] ^= 1
-    with pytest.raises(Exception):
+    with pytest.raises(InvalidTag):
         decrypt_document(bytes(blob), associated_data=b"tenant:artifact")
