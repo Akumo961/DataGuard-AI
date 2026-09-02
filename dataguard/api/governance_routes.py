@@ -184,10 +184,14 @@ async def list_pias(
     if status:
         query = query.where(PIARecord.status == status.upper())
     rows = (
-        await session.execute(
-            query.order_by(PIARecord.created_at.desc()).offset(offset).limit(limit)
+        (
+            await session.execute(
+                query.order_by(PIARecord.created_at.desc()).offset(offset).limit(limit)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [
         PIAResponse(
             id=str(r.id),
@@ -279,13 +283,20 @@ async def list_remediations(
     if status:
         query = query.where(RemediationItem.status == status.upper())
     rows = (
-        await session.execute(
-            query.order_by(RemediationItem.created_at.desc()).offset(offset).limit(limit)
+        (
+            await session.execute(
+                query.order_by(RemediationItem.created_at.desc()).offset(offset).limit(limit)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [
         RemediationResponse(
-            id=str(r.id), organization_id=principal.organization_id, status=r.status, priority=r.priority
+            id=str(r.id),
+            organization_id=principal.organization_id,
+            status=r.status,
+            priority=r.priority,
         )
         for r in rows
     ]
@@ -309,7 +320,9 @@ async def transition_remediation(
         raise HTTPException(status_code=400, detail="Invalid remediation status")
     forbidden = {"raw_value", "value", "pii", "secret", "token", "password"}
     if forbidden.intersection(request.evidence):
-        raise HTTPException(status_code=400, detail="Evidence must not contain raw sensitive values")
+        raise HTTPException(
+            status_code=400, detail="Evidence must not contain raw sensitive values"
+        )
     row = (
         await session.execute(
             select(RemediationItem).where(

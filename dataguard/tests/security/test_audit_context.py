@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from dataguard.security.audit_context import AuditRequestContext, get_context, reset_context, set_context
+from dataguard.security.audit_context import (
+    AuditRequestContext,
+    get_context,
+    reset_context,
+    set_context,
+)
 
 
 def test_audit_context_round_trip() -> None:
