@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9", "pytest-cov>=6,<7", "ruff>=0.12,<1", "mypy>=1.17,<2", "httpx>=0.28,<1", "boto3>=1.40,<2"]
+dev = ["pytest>=8,<9", "pytest-cov>=6,<7", "pytest-asyncio>=1.2,<2", "ruff>=0.12,<1", "mypy>=1.17,<2", "httpx>=0.28,<1", "boto3>=1.40,<2"]
 ocr = ["pytesseract>=0.3.13,<1"]
 ner = ["spacy>=3.8,<3.9"]
 storage = ["boto3>=1.40,<2"]
