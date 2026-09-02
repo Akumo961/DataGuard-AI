@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     Uuid,
     event,
@@ -87,6 +88,26 @@ class Analysis(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     source_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     result: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     __table_args__ = (Index("uq_analysis_org_id", "organization_id", "id", unique=True),)
+
+
+class DocumentArtifact(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
+    """Encrypted durable input for asynchronous document analysis.
+
+    The queue contains only the artifact id. Plaintext document bytes never enter Redis.
+    """
+
+    __tablename__ = "document_artifacts"
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    analysis_id: Mapped[UUID] = mapped_column(
+        ForeignKey("analyses.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Finding(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
