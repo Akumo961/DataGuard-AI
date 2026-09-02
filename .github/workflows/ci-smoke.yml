@@ -1,0 +1,23 @@
+name: DataGuard CI Smoke
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify runner and repository
+        run: |
+          set -euo pipefail
+          python3 --version
+          test -f pyproject.toml
+          python3 -m compileall -q dataguard
