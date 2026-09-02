@@ -106,7 +106,9 @@ class DocumentArtifact(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, B
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

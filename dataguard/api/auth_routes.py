@@ -175,7 +175,9 @@ async def oidc_login(
             )
         ).scalar_one_or_none()
         if email_user is not None and email_user.external_subject not in {None, identity.subject}:
-            raise HTTPException(status_code=409, detail="OIDC identity is already linked to another user")
+            raise HTTPException(
+                status_code=409, detail="OIDC identity is already linked to another user"
+            )
         user = email_user or User(
             organization_id=organization.id,
             external_subject=identity.subject,
@@ -191,13 +193,17 @@ async def oidc_login(
     if not user.active:
         raise HTTPException(status_code=403, detail="User is inactive")
     existing_roles = (
-        await session.execute(
-            select(UserRole).where(
-                UserRole.organization_id == organization.id,
-                UserRole.user_id == user.id,
+        (
+            await session.execute(
+                select(UserRole).where(
+                    UserRole.organization_id == organization.id,
+                    UserRole.user_id == user.id,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     role_values = {Role(role.role) for role in existing_roles}
     if not role_values:
         role_values = set(identity.roles) or {Role.ANALYST}
@@ -216,7 +222,10 @@ async def oidc_login(
             object_type="user",
             object_id=str(user.id),
             previous_state=None,
-            new_state={"external_subject": identity.subject, "provisioned": not bool(existing_roles)},
+            new_state={
+                "external_subject": identity.subject,
+                "provisioned": not bool(existing_roles),
+            },
             request_id=None,
             ip_address=None,
             result="SUCCESS",

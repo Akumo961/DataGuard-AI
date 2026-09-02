@@ -43,7 +43,9 @@ class JobQueue:
         )
         return record
 
-    async def _decode_entry(self, group: str, entry: tuple[str, dict]) -> tuple[str, JobRecord] | None:
+    async def _decode_entry(
+        self, group: str, entry: tuple[str, dict]
+    ) -> tuple[str, JobRecord] | None:
         message_id, fields = entry
         raw = fields.get("job")
         if raw is None:
@@ -101,7 +103,7 @@ class JobQueue:
         if next_attempt >= max_attempts:
             await self.redis.xadd(
                 self.dead_letter_stream,
-                {"job": json.dumps(asdict(JobRecord(**{**asdict(job), "attempt": next_attempt})))}
+                {"job": json.dumps(asdict(JobRecord(**{**asdict(job), "attempt": next_attempt})))},
             )
             await self.ack(group, message_id)
             return

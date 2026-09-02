@@ -79,7 +79,11 @@ def create_access_token(
         payload.update({"iss": settings.jwt_issuer, "aud": settings.jwt_audience})
         return jwt.encode(payload, key, algorithm=settings.jwt_algorithm)
 
-    secret = settings.jwt_secret.get_secret_value() if settings.jwt_secret else os.getenv("DATAGUARD_JWT_SECRET")
+    secret = (
+        settings.jwt_secret.get_secret_value()
+        if settings.jwt_secret
+        else os.getenv("DATAGUARD_JWT_SECRET")
+    )
     if settings.jwt_algorithm != "HS256" or not secret:
         raise RuntimeError("Development token issuance requires an HS256 JWT secret")
     return jwt.encode(payload, secret, algorithm="HS256")
@@ -125,7 +129,11 @@ def decode_access_token(token: str) -> AuthenticatedPrincipal:
     if not token or len(token) > 16_384:
         raise InvalidTokenError("Invalid access token")
     if settings.jwt_algorithm == "HS256":
-        key = settings.jwt_secret.get_secret_value() if settings.jwt_secret else os.getenv("DATAGUARD_JWT_SECRET")
+        key = (
+            settings.jwt_secret.get_secret_value()
+            if settings.jwt_secret
+            else os.getenv("DATAGUARD_JWT_SECRET")
+        )
         if not key:
             raise RuntimeError("JWT validation key is not configured")
     else:

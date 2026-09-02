@@ -15,7 +15,9 @@ def _key() -> bytes:
         raise RuntimeError(f"{_KEY_ENV} is required for durable document processing")
     if os.getenv("DATAGUARD_ENVIRONMENT", "development").lower() in {"production", "prod"}:
         if raw == _DEV_KEY:
-            raise RuntimeError("The development document encryption key cannot be used in production")
+            raise RuntimeError(
+                "The development document encryption key cannot be used in production"
+            )
     try:
         key = base64.urlsafe_b64decode(raw.encode("ascii"))
     except (ValueError, UnicodeEncodeError) as exc:

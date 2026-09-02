@@ -35,7 +35,9 @@ async def handle_document_analysis(job: JobRecord) -> None:
             {"org": job.tenant_id},
         )
         organization = (
-            await session.execute(select(Organization).where(Organization.id == UUID(job.tenant_id)))
+            await session.execute(
+                select(Organization).where(Organization.id == UUID(job.tenant_id))
+            )
         ).scalar_one_or_none()
         if organization is None or not organization.active:
             raise ValueError("Document tenant is not active")
@@ -109,7 +111,10 @@ async def handle_document_analysis(job: JobRecord) -> None:
                     classification_confidence=payload["classification"]["confidence"],
                     status="OPEN",
                     owner_id=subject_id,
-                    evidence={"redacted_value": item["redacted_value"], "detector": item["detector"]},
+                    evidence={
+                        "redacted_value": item["redacted_value"],
+                        "detector": item["detector"],
+                    },
                 )
                 for item in payload["detections"]
             )
