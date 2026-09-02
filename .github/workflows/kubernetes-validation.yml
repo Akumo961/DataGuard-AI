@@ -16,12 +16,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate Kubernetes manifests offline
+        shell: bash
         run: |
+          set -euo pipefail
+          mapfile -t manifests < <(find deploy/kubernetes -maxdepth 1 -type f -name '*.yaml' -print | sort)
+          test "${#manifests[@]}" -gt 0
+          args=()
+          for manifest in "${manifests[@]}"; do
+            args+=("/work/${manifest}")
+          done
           docker run --rm \
-            --entrypoint sh \
             -v "$PWD:/work:ro" \
             ghcr.io/yannh/kubeconform:v0.7.0 \
-            -c 'kubeconform -strict -summary /work/deploy/kubernetes/*.yaml'
+            -strict -summary "${args[@]}"
       - name: Validate rollout and rollback metadata
         run: |
           test "$(grep -c 'revisionHistoryLimit:' deploy/kubernetes/api-deployment.yaml)" -ge 1
