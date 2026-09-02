@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 from sqlalchemy import select, text
@@ -135,12 +135,16 @@ async def login(request: LoginRequest, session: AsyncSession = Depends(get_sessi
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(
-    principal: Principal = Depends(get_principal),
-    redis: Redis | None = None,
-) -> None:
-    # FastAPI cannot inject app.state through this signature, so use the optional
-    # dependency only as a compatibility hook; the actual revocation endpoint is
-    # implemented by middleware-aware clients via the shared Redis service.
-    del principal, redis
-    raise HTTPException(status_code=503, detail="Revocation service unavailable")
+async def logout(request: Request, principal: Principal = Depends(get_principal)) -> None:
+    if not principal.jti:
+        return
+    redis: Redis | None = getattr(request.app.state, "redis", None)
+    if redis is None:
+        if get_settings().environment == "production":
+            raise HTTPException(status_code=503, detail="Revocation service unavailable")
+        return
+    remaining = max(
+        1,
+        int((datetime.fromisoformat(principal.expires_at) - datetime.now(timezone.utc)).total_seconds()),
+    )
+    await redis.set(f"dataguard:revoked:{principal.jti}", "1", ex=remaining)
