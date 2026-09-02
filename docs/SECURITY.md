@@ -12,6 +12,7 @@ DataGuard treats customer content and derived sensitive-data findings as confide
 - Tenant predicates in application repositories/routes.
 - Request size limits and rate limiting middleware.
 - Upload filename, extension, magic-byte, MIME and archive/OOXML checks.
+- Optional ClamAV INSTREAM malware scanning before document extraction; production configuration now fails closed when no scanner endpoint is supplied.
 - Same-origin restrictive CSP and security response headers.
 - Redacted detection output; raw detected values are not persisted by the findings model.
 - Append-only audit events with organization-scoped hash chaining.
@@ -22,7 +23,7 @@ DataGuard treats customer content and derived sensitive-data findings as confide
 - Independent penetration test.
 - Production OIDC provider acceptance tests, provisioning and lifecycle controls.
 - Managed secret/KMS deployment evidence.
-- Malware scanning/quarantine/sandboxing for uploaded content.
+- Malware quarantine/sandboxing and an operational response process around scanner detections.
 - Formal vulnerability-management SLA and SBOM publication process.
 - External assurance such as SOC 2/ISO 27001 only after the applicable audit process is actually completed.
 
