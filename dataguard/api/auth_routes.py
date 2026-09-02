@@ -9,7 +9,8 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dataguard.api.dependencies import Principal, get_principal
+from dataguard.api.dependencies import Principal, get_principal, require_permission
+from dataguard.api.schemas import ClassificationPolicyRequest, ClassificationPolicyResponse
 from dataguard.core.config import get_settings
 from dataguard.database.models import Organization, User, UserRole
 from dataguard.database.session import get_session
@@ -145,6 +146,46 @@ async def logout(request: Request, principal: Principal = Depends(get_principal)
         return
     remaining = max(
         1,
-        int((datetime.fromisoformat(principal.expires_at) - datetime.now(timezone.utc)).total_seconds()),
+        int(
+            (datetime.fromisoformat(principal.expires_at) - datetime.now(timezone.utc)).total_seconds()
+        ),
     )
     await redis.set(f"dataguard:revoked:{principal.jti}", "1", ex=remaining)
+
+
+@router.get("/classification-policy", response_model=ClassificationPolicyResponse)
+async def get_classification_policy(
+    principal: Principal = Depends(require_permission("classification:manage")),
+    session: AsyncSession = Depends(get_session),
+) -> ClassificationPolicyResponse:
+    row = (
+        await session.execute(
+            select(Organization).where(Organization.id == principal.organization_id)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return ClassificationPolicyResponse(
+        organization_id=principal.organization_id,
+        **row.classification_policy,
+    )
+
+
+@router.put("/classification-policy", response_model=ClassificationPolicyResponse)
+async def update_classification_policy(
+    request: ClassificationPolicyRequest,
+    principal: Principal = Depends(require_permission("classification:manage")),
+    session: AsyncSession = Depends(get_session),
+) -> ClassificationPolicyResponse:
+    await _set_tenant_context(session, principal.organization_id)
+    row = (
+        await session.execute(
+            select(Organization).where(Organization.id == principal.organization_id)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    policy = request.model_dump()
+    row.classification_policy = policy
+    await session.commit()
+    return ClassificationPolicyResponse(organization_id=principal.organization_id, **policy)
