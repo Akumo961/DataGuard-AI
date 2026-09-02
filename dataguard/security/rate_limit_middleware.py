@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse, Response
 
 from dataguard.core.config import get_settings
 from dataguard.security.audit_context import AuditRequestContext, reset_context, set_context
+from dataguard.security.metrics import metrics
 from dataguard.security.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 
 
@@ -44,6 +45,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 client=client or None,
             )
         )
+        metrics.inc("dataguard_requests_total", method=request.method, path=request.url.path)
         try:
             if request.url.path in {"/health/live", "/health/ready"}:
                 return await call_next(request)
@@ -58,22 +60,32 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 else:
                     settings = get_settings()
                     if settings.environment == "production":
+                        metrics.inc("dataguard_rate_limit_errors_total", reason="unavailable")
                         return JSONResponse(
                             {"detail": "Rate limiting service unavailable"}, status_code=503
                         )
                     allowed = await self._memory_limiter.allow(key, self._limit)
             except Exception:
+                metrics.inc("dataguard_rate_limit_errors_total", reason="backend_error")
                 if get_settings().environment == "production":
                     return JSONResponse(
                         {"detail": "Rate limiting service unavailable"}, status_code=503
                     )
                 allowed = await self._memory_limiter.allow(key, self._limit)
             if not allowed:
+                metrics.inc("dataguard_rate_limited_total", path=request.url.path)
                 return JSONResponse(
                     {"detail": "Rate limit exceeded"},
                     status_code=429,
                     headers={"Retry-After": "60"},
                 )
-            return await call_next(request)
+            response = await call_next(request)
+            metrics.inc(
+                "dataguard_response_total",
+                method=request.method,
+                path=request.url.path,
+                status=str(response.status_code),
+            )
+            return response
         finally:
             reset_context(token)
