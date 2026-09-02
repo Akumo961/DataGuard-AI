@@ -47,6 +47,7 @@ services:
 
   document-worker:
     image: dataguard-api:ci
+    build: .
     command: ["python", "-m", "dataguard.jobs.document_worker"]
     environment:
       DATAGUARD_ENVIRONMENT: ${DATAGUARD_ENVIRONMENT:-development}
