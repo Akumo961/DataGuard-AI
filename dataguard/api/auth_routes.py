@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +20,9 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 class RegisterRequest(BaseModel):
     organization_name: str = Field(min_length=2, max_length=255)
-    organization_slug: str = Field(min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]+$")
+    organization_slug: str = Field(
+        min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]+$"
+    )
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=12, max_length=1024)
     display_name: str = Field(min_length=1, max_length=255)
@@ -37,6 +39,14 @@ def _require_development() -> None:
         raise HTTPException(status_code=404, detail="Not found")
 
 
+async def _set_tenant_context(session: AsyncSession, organization_id) -> None:
+    """Bind the current transaction to the tenant before touching RLS-protected rows."""
+    await session.execute(
+        text("SELECT set_config('dataguard.organization_id', :org, true)"),
+        {"org": str(organization_id)},
+    )
+
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(request: RegisterRequest, session: AsyncSession = Depends(get_session)) -> dict:
     _require_development()
@@ -45,15 +55,19 @@ async def register(request: RegisterRequest, session: AsyncSession = Depends(get
         slug=request.organization_slug, name=request.organization_name.strip()
     )
     session.add(organization)
-    user = User(
-        organization=organization,
-        email=email,
-        password_hash=hash_password(request.password),
-        display_name=request.display_name.strip(),
-        active=True,
-    )
-    session.add(user)
     try:
+        # Organizations are not RLS-protected. Once the organization exists, bind the
+        # transaction before inserting the tenant-scoped user and role rows.
+        await session.flush()
+        await _set_tenant_context(session, organization.id)
+        user = User(
+            organization_id=organization.id,
+            email=email,
+            password_hash=hash_password(request.password),
+            display_name=request.display_name.strip(),
+            active=True,
+        )
+        session.add(user)
         await session.flush()
         session.add(
             UserRole(organization_id=organization.id, user_id=user.id, role=Role.ANALYST.value)
@@ -69,11 +83,27 @@ async def register(request: RegisterRequest, session: AsyncSession = Depends(get
 async def login(request: LoginRequest, session: AsyncSession = Depends(get_session)) -> dict:
     _require_development()
     email = request.email.strip().lower()
+
+    # Organization lookup is intentionally separate because organizations are not
+    # tenant-scoped. All subsequent user/role reads occur after binding the RLS context.
+    organization = (
+        await session.execute(
+            select(Organization).where(
+                Organization.slug == request.organization_slug,
+                Organization.active.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+    if organization is None:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    await _set_tenant_context(session, organization.id)
     row = (
         await session.execute(
-            select(User)
-            .join(Organization, Organization.id == User.organization_id)
-            .where(Organization.slug == request.organization_slug, User.email == email)
+            select(User).where(
+                User.organization_id == organization.id,
+                User.email == email,
+            )
         )
     ).scalar_one_or_none()
     now = datetime.now(timezone.utc)
@@ -92,7 +122,12 @@ async def login(request: LoginRequest, session: AsyncSession = Depends(get_sessi
     roles = {
         Role(role.role)
         for role in (
-            await session.execute(select(UserRole).where(UserRole.user_id == row.id))
+            await session.execute(
+                select(UserRole).where(
+                    UserRole.organization_id == organization.id,
+                    UserRole.user_id == row.id,
+                )
+            )
         ).scalars()
     }
     token = create_access_token(
