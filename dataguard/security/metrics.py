@@ -33,9 +33,7 @@ class MetricsRegistry:
             )
             metric_name = name
             lines.append(
-                f"{metric_name}{{{rendered}}} {value}"
-                if rendered
-                else f"{metric_name} {value}"
+                f"{metric_name}{{{rendered}}} {value}" if rendered else f"{metric_name} {value}"
             )
         return "\n".join(lines) + "\n"
 

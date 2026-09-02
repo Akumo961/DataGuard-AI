@@ -225,9 +225,7 @@ def _hash_audit_event(mapper, connection, target: AuditEvent) -> None:
         "result": target.result,
         "previous_hash": previous_hash,
     }
-    canonical = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), default=str
-    ).encode()
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
     target.previous_hash = previous_hash
     target.integrity_hash = hashlib.sha256(canonical).hexdigest()
 

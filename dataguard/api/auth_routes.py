@@ -24,9 +24,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 class RegisterRequest(BaseModel):
     organization_name: str = Field(min_length=2, max_length=255)
-    organization_slug: str = Field(
-        min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]+$"
-    )
+    organization_slug: str = Field(min_length=2, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]+$")
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=12, max_length=1024)
     display_name: str = Field(min_length=1, max_length=255)
@@ -52,9 +50,7 @@ async def _set_tenant_context(session: AsyncSession, organization_id) -> None:
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(
-    request: RegisterRequest, session: AsyncSession = Depends(get_session)
-) -> dict:
+async def register(request: RegisterRequest, session: AsyncSession = Depends(get_session)) -> dict:
     _require_development()
     email = request.email.strip().lower()
     organization = Organization(
@@ -79,9 +75,7 @@ async def register(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(
-            status_code=409, detail="Organization or email already exists"
-        ) from exc
+        raise HTTPException(status_code=409, detail="Organization or email already exists") from exc
     return {"organization_id": str(organization.id), "user_id": str(user.id), "email": email}
 
 
@@ -152,7 +146,9 @@ async def logout(request: Request, principal: Principal = Depends(get_principal)
     remaining = max(
         1,
         int(
-            (datetime.fromisoformat(principal.expires_at) - datetime.now(timezone.utc)).total_seconds()
+            (
+                datetime.fromisoformat(principal.expires_at) - datetime.now(timezone.utc)
+            ).total_seconds()
         ),
     )
     await redis.set(f"dataguard:revoked:{principal.jti}", "1", ex=remaining)

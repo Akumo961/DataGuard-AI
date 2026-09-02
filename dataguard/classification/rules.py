@@ -77,9 +77,7 @@ class RuleBasedClassifier(Classifier):
         policy_mapping = get_classification_policy()
         try:
             policy = (
-                ClassificationPolicy.from_mapping(policy_mapping)
-                if policy_mapping
-                else self.policy
+                ClassificationPolicy.from_mapping(policy_mapping) if policy_mapping else self.policy
             )
         except ValueError:
             policy = self.policy
@@ -102,9 +100,7 @@ class RuleBasedClassifier(Classifier):
         for label, policy_attr in self._levels:
             if detected_types & getattr(policy, policy_attr):
                 confidence = min(
-                    item.confidence
-                    for item in detections
-                    if item.pii_type.value in detected_types
+                    item.confidence for item in detections if item.pii_type.value in detected_types
                 )
                 return Classification(
                     label=label,

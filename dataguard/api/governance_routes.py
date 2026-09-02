@@ -207,10 +207,14 @@ async def list_pias(
     if status:
         query = query.where(PIARecord.status == status.upper())
     rows = (
-        await session.execute(
-            query.order_by(PIARecord.created_at.desc()).offset(offset).limit(limit)
+        (
+            await session.execute(
+                query.order_by(PIARecord.created_at.desc()).offset(offset).limit(limit)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [
         PIAResponse(
             id=str(r.id),
@@ -302,10 +306,14 @@ async def list_remediations(
     if status:
         query = query.where(RemediationItem.status == status.upper())
     rows = (
-        await session.execute(
-            query.order_by(RemediationItem.created_at.desc()).offset(offset).limit(limit)
+        (
+            await session.execute(
+                query.order_by(RemediationItem.created_at.desc()).offset(offset).limit(limit)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [_remediation(r, principal.organization_id) for r in rows]
 
 
