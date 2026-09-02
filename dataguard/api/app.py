@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,6 +20,7 @@ from dataguard.api.schemas import (
     AnalyzeResponse,
     ClassificationResponse,
     DetectionResponse,
+    FindingResponse,
     GovernanceResponse,
     PIARequest,
     PIAResponse,
@@ -32,7 +33,7 @@ from dataguard.classification.rules import RuleBasedClassifier
 from dataguard.compliance.engine import ComplianceEngine
 from dataguard.compliance.loader import FrameworkLoader
 from dataguard.core.config import get_settings
-from dataguard.database.models import Analysis, AuditEvent, PIARecord, RemediationItem
+from dataguard.database.models import Analysis, AuditEvent, Finding, PIARecord, RemediationItem
 from dataguard.database.session import engine, get_session
 from dataguard.detection.ensemble import EnsembleDetector
 from dataguard.detection.pipeline import PIIDetectionPipeline
@@ -146,6 +147,28 @@ async def _persist_analysis(
     )
     session.add(analysis)
     await session.flush()
+
+    classification = payload["classification"]
+    session.add_all(
+        Finding(
+            organization_id=UUID(principal.organization_id),
+            analysis_id=analysis.id,
+            pii_type=item["type"],
+            start_offset=item["start"],
+            end_offset=item["end"],
+            confidence=item["confidence"],
+            detector=item["detector"],
+            classification_label=classification["label"],
+            classification_confidence=classification["confidence"],
+            status="OPEN",
+            owner_id=principal.subject,
+            evidence={
+                "redacted_value": item["redacted_value"],
+                "detector": item["detector"],
+            },
+        )
+        for item in payload["detections"]
+    )
     session.add(
         AuditEvent(
             organization_id=UUID(principal.organization_id),
@@ -404,6 +427,46 @@ def create_app() -> FastAPI:
             "status": row.status,
             "result": row.result,
         }
+
+    @app.get("/api/v1/findings", response_model=list[FindingResponse], tags=["findings"])
+    async def list_findings(
+        principal: Principal = Depends(require_permission("finding:read")),
+        session: AsyncSession = Depends(get_session),
+        pii_type: str | None = Query(default=None, max_length=80),
+        status: str | None = Query(default=None, max_length=40),
+        limit: int = Query(default=50, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+    ) -> list[FindingResponse]:
+        await _tenant_session(session, principal.organization_id)
+        query = select(Finding).where(Finding.organization_id == UUID(principal.organization_id))
+        if pii_type:
+            query = query.where(Finding.pii_type == pii_type)
+        if status:
+            query = query.where(Finding.status == status)
+        rows = (
+            await session.execute(
+                query.order_by(Finding.created_at.desc(), Finding.id.desc())
+                .offset(offset)
+                .limit(limit)
+            )
+        ).scalars().all()
+        return [
+            FindingResponse(
+                id=str(row.id),
+                analysis_id=str(row.analysis_id),
+                pii_type=row.pii_type,
+                start_offset=row.start_offset,
+                end_offset=row.end_offset,
+                confidence=row.confidence,
+                detector=row.detector,
+                classification_label=row.classification_label,
+                classification_confidence=row.classification_confidence,
+                status=row.status,
+                owner_id=row.owner_id,
+                evidence=row.evidence,
+            )
+            for row in rows
+        ]
 
     @app.post("/api/v1/pias", response_model=PIAResponse, tags=["governance"])
     async def create_pia(
