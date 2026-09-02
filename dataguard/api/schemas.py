@@ -24,6 +24,13 @@ class DetectionResponse(BaseModel):
     redacted_value: str
 
 
+class ClassificationResponse(BaseModel):
+    label: str
+    confidence: float
+    rationale: str
+    model_version: str | None = None
+
+
 class RiskResponse(BaseModel):
     score: float
     level: str
@@ -41,6 +48,7 @@ class AnalyzeResponse(BaseModel):
     analysis_id: str | None = None
     organization_id: str
     detections: list[DetectionResponse]
+    classification: ClassificationResponse
     risk: RiskResponse
     governance: GovernanceResponse | None = None
 
