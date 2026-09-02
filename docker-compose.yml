@@ -25,6 +25,7 @@ services:
       retries: 10
 
   api:
+    image: dataguard-api:ci
     build: .
     environment:
       DATAGUARD_ENVIRONMENT: ${DATAGUARD_ENVIRONMENT:-development}
